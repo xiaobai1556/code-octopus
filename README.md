@@ -2,6 +2,8 @@
 
 给 Claude Code 用的像素风桌宠（Windows）。
 
+![代码小章鱼演示](docs/demo.gif)
+
 > **非官方项目**：这是一个社区粉丝作品，与 Anthropic 没有任何关联，也没有得到 Anthropic 的认可或背书。Claude 和 Claude Code 是 Anthropic 的商标。
 
 一只像素风的小章鱼，住在你的桌面上，和 Claude Code 联动：
