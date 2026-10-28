@@ -779,13 +779,16 @@ function drawBubble(pet, v) {
   const a = pet.activity;
   const jumping = a && ((a.kind === 'alert' && a.urgent) || a.kind === 'done') ? 38 : 0;
   const head = pet.y - pet.height - pet.overhead() - jumping;
-  const cx = Math.round((pet.x + (pet.lastSway || 0)) * dpr);
+  // 带按钮的气泡不跟着左右晃，按钮才点得准
+  const cx = Math.round((pet.x + (v.buttons ? 0 : pet.lastSway || 0)) * dpr);
   const x = clamp(Math.round(cx - w / 2), S(4), canvas.width - w - S(4));
   // 头顶放不下（站在贴着屏幕顶的窗口上）：放到脚下面，免得盖住举着的牌子
   const above = Math.round((head - 8) * dpr) - h - tailH;
   const below = above < S(4);
   const y = below ? Math.min(canvas.height - h - S(4), Math.round((pet.y + 6) * dpr) + tailH) : above;
   const tx = clamp(cx, x + S(9) + tailW, x + w - S(9) - tailW);
+  // 气泡占的地方（DIP）：鼠标靠近带按钮的气泡时，桌宠停下来等你点
+  pet.bubbleBox = v.buttons ? { l: x / dpr, t: y / dpr, r: (x + w) / dpr, b: (y + h) / dpr } : null;
 
   ctx.save();
   ctx.globalAlpha = v.alpha;
@@ -1019,7 +1022,7 @@ function render(poses, views) {
 
   for (const pet of world.pets) {
     const v = views.get(pet);
-    if (!v) pet.buttonRects = null;
+    if (!v) pet.buttonRects = pet.bubbleBox = null;
     else if (v.card) drawCard(pet, v);
     else drawBubble(pet, v);
   }

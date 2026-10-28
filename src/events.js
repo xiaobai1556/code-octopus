@@ -160,6 +160,7 @@ function summarize(ev) {
       const failed = e === 'PostToolUseFailure' || !!(ev.tool_response && ev.tool_response.is_error);
       out.tool = ev.tool_name || '';
       out.toolKind = toolKind(out.tool);
+      out.detail = describeTool(out.tool, ev.tool_input || {}); // 和 PermissionRequest 的对得上：等批准的那个工具跑完了
       out.error = failed;
       out.test = testOutcome(ev, failed);
       out.task = failed ? null : taskChange(e, out.tool, ev.tool_input || {}, ev.tool_response);

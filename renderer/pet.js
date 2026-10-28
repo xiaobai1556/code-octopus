@@ -249,12 +249,32 @@ class Pet {
     this.world.sound('done');
   }
 
+  // 举着「!」等你批准某个工具（或者气泡里有按钮等你点）
+  waitingApproval() {
+    const a = this.activity;
+    return !!this.ask || !!(a && a.kind === 'alert' && a.approval);
+  }
+
+  // 这个事件说明批准那件事已经过去了：这一轮结束 / 你发了新消息 / 要批准的那个工具跑完了。
+  // 气泡里有按钮时只认这些（主进程那边处理完会另外发 permission-done）；
+  // 没开"在桌宠上批准"的，你在终端里批准后不一定有对应的事件，过了几秒以后来的工具事件也算
+  approvalOverBy(ev) {
+    if (['UserPromptSubmit', 'Stop', 'StopFailure', 'SessionStart', 'SessionEnd'].includes(ev.event)) return true;
+    const a = this.activity;
+    if (!a || a.kind !== 'alert') return !this.ask;
+    const post = ev.event === 'PostToolUse' || ev.event === 'PostToolUseFailure';
+    if (post && ev.tool === a.tool && (!a.detail || !ev.detail || ev.detail === a.detail)) return true;
+    if (this.ask) return false;
+    return (post || ev.event === 'PreToolUse') && performance.now() - a.since > 3000;
+  }
+
   // 在桌宠身上批准：牌子照举，气泡里给出完整命令和「允许 / 拒绝 / 去终端」
   askPermission({ id, tool, detail }) {
     this.ask = { id, tool, detail };
     this.cardUntil = 0;
     const a = this.activity;
     if (!a || a.kind !== 'alert') this.alert('!', tr('say.approve'), true, tool);
+    if (this.activity) Object.assign(this.activity, { approval: true, tool: this.activity.tool || tool });
     this.say(tr('ask.title'), Infinity, true, { sub: [tool, detail].filter(Boolean).join(' · '), code: true });
   }
 
@@ -439,6 +459,12 @@ class Pet {
     if (ev.canJump) this.canJump = true;
     if (ev.context !== undefined) this.setContext(ev.context);
     if (ev.progress) this.progress = ev.progress;
+    // 正等你批准：同一轮里并行的其他工具、子代理发来的事件不能把牌子和按钮冲掉
+    if (this.waitingApproval() && !this.approvalOverBy(ev)) {
+      if (ev.event === 'SubagentStart') this.addMini(ev.agentId);
+      else if (ev.event === 'SubagentStop') this.removeMini(ev.agentId);
+      if (ev.event !== 'Notification' && ev.event !== 'PermissionRequest') return;
+    }
     if (this.holding() && ev.event !== 'Notification' && ev.event !== 'PermissionRequest') this.clearActivity();
     const brief = this.world.bubbles === 'brief';
 
@@ -486,6 +512,7 @@ class Pet {
       case 'PermissionRequest':
         if (ev.tool) this.alert('!', tr('say.approve'), true, ev.tool, [ev.tool, ev.detail !== ev.tool ? ev.detail : ''].filter(Boolean).join(' · '));
         else this.alert('!', tr('say.approve'), true);
+        if (this.activity) Object.assign(this.activity, { approval: true, detail: ev.detail || '' });
         break;
       case 'Notification':
         if (ev.notify === 'permission') this.alert('!', tr('say.approve'), true);
@@ -911,6 +938,13 @@ class Pet {
     }
     if (this.game && w.games.behave(this, dt)) return;
     const a = this.activity;
+    // 鼠标伸向带按钮的气泡了：别跑了，站着等你点
+    const bb = this.bubbleBox;
+    const m = w.mouse;
+    if (this.ask && bb && m && m.x > bb.l - 60 && m.x < bb.r + 60 && m.y > bb.t - 60 && m.y < bb.b + 60) {
+      this.mode = 'busy';
+      return;
+    }
     if (a && (a.kind === 'alert' || a.kind === 'done') && a.goto) {
       const tx = w.alertTargetX(this);
       if (Math.abs(tx - this.x) > 3) {
