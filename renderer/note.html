@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title></title>
+    <style>
+      :root {
+        --bg: #faf9f5;
+        --card: #fff9d6;
+        --ink: #2b2620;
+        --muted: #8a8178;
+        --line: #e8dfb0;
+        --accent: #d97757;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1f1e1c;
+          --card: #3a3524;
+          --ink: #eeeae4;
+          --muted: #a39b91;
+          --line: #554d33;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        font: 14px/1.5 'Segoe UI', 'Microsoft YaHei UI', 'Yu Gothic UI', system-ui, sans-serif;
+      }
+      form {
+        height: 100%;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      textarea {
+        flex: 1;
+        resize: none;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: inherit;
+        font: inherit;
+        outline: none;
+      }
+      textarea:focus {
+        border-color: var(--accent);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .row label {
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      select,
+      button {
+        font: inherit;
+        color: inherit;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: var(--bg);
+        padding: 4px 10px;
+      }
+      .spacer {
+        flex: 1;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+        padding: 4px 16px;
+        cursor: pointer;
+      }
+      button.ghost {
+        border-color: transparent;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <form id="form">
+      <textarea id="text" maxlength="200" autofocus></textarea>
+      <div class="row">
+        <label for="remind" data-t="note.remind"></label>
+        <select id="remind"></select>
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="cancel" data-t="note.cancel"></button>
+        <button type="submit" class="primary" data-t="note.save"></button>
+      </div>
+    </form>
+    <script src="../src/i18n.js"></script>
+    <script src="note.js"></script>
+  </body>
+</html>

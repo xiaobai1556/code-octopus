@@ -1,0 +1,213 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title></title>
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <canvas id="hero-pet"></canvas>
+      <div>
+        <h1 data-t="app.name"></h1>
+        <p class="meta"><span class="badge" data-t="set.unofficial"></span><span id="version"></span></p>
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2 data-t="set.pets"></h2>
+        <ul id="pets" class="pets"></ul>
+      </section>
+
+      <section class="card">
+        <h2 data-t="set.appearance"></h2>
+        <div class="row">
+          <span class="label" data-t="set.size"></span>
+          <div class="seg" id="size"></div>
+        </div>
+        <div class="row">
+          <span class="label" data-t="set.color"></span>
+          <div class="swatches" id="colors"></div>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.bubbles"></span>
+            <small data-t="set.bubblesHint"></small>
+          </div>
+          <div class="seg" id="bubbles"></div>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.collide"></span>
+            <small data-t="set.collideHint"></small>
+          </div>
+          <button class="switch" id="collide" role="switch"></button>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.context"></span>
+            <small data-t="set.contextHint"></small>
+          </div>
+          <div class="seg" id="ctxwin"></div>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.sound"></span>
+            <small data-t="set.soundHint"></small>
+          </div>
+          <button class="switch" id="sound" role="switch"></button>
+        </div>
+        <div class="row">
+          <span class="label" data-t="set.language"></span>
+          <select id="lang"></select>
+        </div>
+      </section>
+
+      <section class="card" id="play">
+        <h2 data-t="set.play"></h2>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.dance"></span>
+            <small data-t="set.danceHint"></small>
+          </div>
+          <button class="switch" id="dance" role="switch"></button>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.timeOfDay"></span>
+            <small data-t="set.timeOfDayHint"></small>
+          </div>
+          <button class="switch" id="time-of-day" role="switch"></button>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.pomodoro"></span>
+            <small data-t="set.pomodoroHint"></small>
+          </div>
+          <div class="seg" id="pomodoro"></div>
+        </div>
+      </section>
+
+      <section class="card" id="wardrobe">
+        <h2 data-t="set.wardrobe"></h2>
+        <div class="wardrobe">
+          <canvas id="dressed"></canvas>
+          <div class="slots" id="slots"></div>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.holidays"></span>
+            <small id="holiday-hint"></small>
+          </div>
+          <button class="switch" id="holidays" role="switch"></button>
+        </div>
+      </section>
+
+      <section class="card" id="achievements">
+        <h2><span data-t="set.achievements"></span><span class="count" id="ach-count"></span></h2>
+        <ul class="achievements" id="ach-list"></ul>
+      </section>
+
+      <section class="card" id="feeding">
+        <h2 data-t="set.feed"></h2>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.feedOn"></span>
+            <small data-t="set.feedHint"></small>
+          </div>
+          <button class="switch" id="feed" role="switch"></button>
+        </div>
+        <div class="row">
+          <div class="method-text">
+            <span class="label" data-t="set.feedDir"></span>
+            <small class="path" id="feed-dir"></small>
+          </div>
+          <div class="pet-buttons">
+            <button class="btn" id="feed-change" data-t="set.change"></button>
+            <button class="btn" id="feed-open" data-t="set.open"></button>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.hungryOn"></span>
+            <small data-t="set.hungryHint"></small>
+          </div>
+          <button class="switch" id="feed-hint" role="switch"></button>
+        </div>
+        <div class="row" id="spit-row" hidden>
+          <span></span>
+          <button class="btn" id="spit"></button>
+        </div>
+      </section>
+
+      <section class="card" id="integration">
+        <h2 data-t="set.integration"></h2>
+        <div class="method">
+          <div class="method-text">
+            <div class="label"><span data-t="set.plugin"></span><span class="tag" data-t="set.recommended"></span></div>
+            <small data-t="set.pluginHint"></small>
+            <div class="status" id="plugin-status"></div>
+          </div>
+          <button class="btn" id="plugin-btn"></button>
+        </div>
+        <div class="method">
+          <div class="method-text">
+            <div class="label" data-t="set.settingsFile"></div>
+            <small data-t="set.settingsHint"></small>
+            <div class="status" id="hooks-status"></div>
+          </div>
+          <button class="btn" id="hooks-btn"></button>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.approve"></span>
+            <small data-t="set.approveHint"></small>
+            <div class="status" id="approve-status" hidden></div>
+          </div>
+          <button class="switch" id="approve" role="switch"></button>
+        </div>
+        <p class="note" data-t="set.bothNote"></p>
+        <p class="error" id="int-error" hidden></p>
+      </section>
+
+      <section class="card">
+        <h2 data-t="set.events"></h2>
+        <ol id="events" class="events"></ol>
+      </section>
+
+      <section class="card" id="updates">
+        <h2 data-t="set.updates"></h2>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.autoUpdate"></span>
+            <small id="update-status"></small>
+          </div>
+          <div class="pet-buttons">
+            <button class="btn" id="update-btn" hidden></button>
+            <button class="switch" id="auto-update" role="switch"></button>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <div class="actions">
+          <button class="btn" id="report" data-t="set.report"></button>
+          <button class="btn" id="demo" data-t="set.demo"></button>
+          <button class="btn" id="summon" data-t="set.summon"></button>
+          <button class="btn" id="tour" data-t="set.tour"></button>
+        </div>
+        <div class="actions">
+          <label class="inline"><button class="switch" id="autostart" role="switch"></button><span data-t="set.autostart"></span></label>
+          <button class="btn ghost" id="quit" data-t="set.quitApp"></button>
+        </div>
+      </footer>
+    </main>
+
+    <script src="../src/i18n.js"></script>
+    <script src="../src/outfits.js"></script>
+    <script src="sprite.js"></script>
+    <script src="settings.js"></script>
+  </body>
+</html>

@@ -1,0 +1,262 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:23333/permission?src=claude-pet-plugin",
+            "timeout": 200
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl",
+            "args": [
+              "-s",
+              "-m",
+              "2",
+              "--data-binary",
+              "@-",
+              "http://127.0.0.1:23333/event?src=claude-pet-plugin"
+            ],
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

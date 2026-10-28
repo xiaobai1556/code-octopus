@@ -1,0 +1,312 @@
+:root {
+  --page: #efebe4;
+  --card: #fbf8f3;
+  --ink: #2b2620;
+  --muted: #857869;
+  --line: #e7dfd2;
+  --accent: #d97757;
+  --green: #3f9a5b;
+  --btn: #ffffff;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #1f1e1c;
+    --btn: #2b2927;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  background: var(--page);
+  font: 14px/1.45 'Segoe UI', 'Microsoft YaHei UI', 'Yu Gothic UI', system-ui, sans-serif;
+}
+body {
+  padding: 14px 18px 24px;
+}
+button {
+  font: inherit;
+}
+
+/* ---------- 顶部工具栏（不在卡片里，截图不带它） ---------- */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  color: #a39b91;
+}
+@media (prefers-color-scheme: light) {
+  .toolbar {
+    color: var(--muted);
+  }
+}
+.days,
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.icon {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+.icon:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.btn {
+  padding: 5px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--btn);
+  color: inherit;
+  cursor: pointer;
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+#toast {
+  font-size: 12px;
+  color: var(--green);
+}
+
+/* ---------- 卡片：亮色，方便直接截图分享 ---------- */
+#card {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px 24px 16px;
+  max-width: 560px;
+  margin: 0 auto;
+  box-shadow: 0 6px 24px rgba(60, 40, 20, 0.12);
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+header canvas {
+  width: 72px;
+  height: 104px;
+  flex: none;
+}
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+#subtitle {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+
+/* 大数字 */
+.hero {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.stat {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.stat .num {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.stat .num small {
+  font-size: 13px;
+  font-weight: 600;
+  margin-left: 2px;
+}
+.stat .lbl {
+  font-size: 12px;
+  color: var(--muted);
+}
+.hero .stat:first-child {
+  border-color: var(--accent);
+}
+.hero .stat:first-child .num {
+  color: var(--accent);
+}
+.minor {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.minor .stat {
+  padding: 7px 10px;
+}
+.minor .num {
+  font-size: 16px;
+}
+
+.block {
+  margin-bottom: 16px;
+}
+h2 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+h2::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+}
+h2 small {
+  margin-left: auto;
+  font-weight: 500;
+}
+
+/* 都在干啥：分段色条 */
+.stack {
+  display: flex;
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--line);
+}
+.stack i {
+  display: block;
+  height: 100%;
+}
+.legend {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12px;
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend b {
+  width: 9px;
+  height: 9px;
+  display: inline-block;
+}
+.legend span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 一天的节奏：24 根像素柱 */
+.hours {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  gap: 3px;
+  align-items: end;
+  height: 64px;
+  border-bottom: 2px solid var(--line);
+}
+.hours i {
+  display: block;
+  background: var(--accent);
+  opacity: 0.85;
+  min-height: 2px;
+}
+.hours i.zero {
+  background: var(--line);
+  opacity: 1;
+}
+.hours i.peak {
+  opacity: 1;
+  background: #c2410c;
+}
+.hour-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.top {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.top li {
+  margin: 2px 0;
+}
+.top li span {
+  color: var(--muted);
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.top .none {
+  list-style: none;
+  margin-left: -18px;
+  color: var(--muted);
+}
+
+.mood {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 4px 0 12px;
+  font-weight: 600;
+}
+.mood canvas {
+  width: 32px;
+  height: 22px;
+  flex: none;
+}
+
+#empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 24px 0 18px;
+}
+#empty canvas {
+  width: 96px;
+  height: 60px;
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}

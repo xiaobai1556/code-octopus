@@ -1,0 +1,14 @@
+{
+  "name": "code-octopus",
+  "owner": {
+    "name": "xiaobai1556"
+  },
+  "description": "Unofficial fan-made desktop pet for Claude Code: a pixel octopus that works when Claude works and comes to find you when Claude needs you.",
+  "plugins": [
+    {
+      "name": "code-octopus",
+      "source": "./plugin",
+      "description": "Hooks that connect Claude Code to the Code Octopus desktop pet (unofficial)."
+    }
+  ]
+}

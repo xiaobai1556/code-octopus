@@ -1,0 +1,26 @@
+{
+  "name": "code-octopus",
+  "version": "0.3.0",
+  "description": "像素风桌宠：Claude Code 干活时它也干活，需要你时它来找你",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "demo": "electron . --demo",
+    "settings": "electron . --settings",
+    "build:plugin": "node scripts/build-plugin.js",
+    "build:icon": "node scripts/make-icon.js",
+    "pack": "node scripts/make-icon.js && electron-builder --config electron-builder.config.js --win --dir",
+    "dist": "node scripts/make-icon.js && electron-builder --config electron-builder.config.js --win"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "koffi": "^3.3.2"
+  },
+  "author": "xiaobai1556",
+  "license": "MIT"
+}

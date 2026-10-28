@@ -1,0 +1,567 @@
+:root {
+  --bg: #faf9f5;
+  --card: #ffffff;
+  --ink: #2b2620;
+  --muted: #8a8178;
+  --line: #ece7df;
+  --hover: #f4f1eb;
+  --accent: #d97757;
+  --accent-ink: #ffffff;
+  --ok: #3f9a5b;
+  --error: #c0392b;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1f1e1c;
+    --card: #292725;
+    --ink: #eeeae4;
+    --muted: #a39b91;
+    --line: #3a3734;
+    --hover: #33302d;
+    --ok: #5cbf7a;
+    --error: #ef6b5b;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 'Segoe UI', 'Microsoft YaHei UI', 'Yu Gothic UI', system-ui, sans-serif;
+}
+
+body {
+  padding: 18px 18px 22px;
+  user-select: none;
+}
+
+button,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---------- 顶部 ---------- */
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 4px 16px;
+}
+.hero canvas {
+  width: 72px;
+  height: 64px;
+  flex: none;
+}
+.hero h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+.meta {
+  margin: 2px 0 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.badge {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+/* ---------- 卡片 ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+.card h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card h2::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+}
+
+.row,
+.method {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.card h2 + .row,
+.card h2 + .method {
+  border-top: none;
+}
+.label {
+  font-weight: 550;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---------- 控件 ---------- */
+.btn {
+  flex: none;
+  padding: 5px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--hover);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.btn.primary:hover {
+  filter: brightness(1.05);
+}
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.btn.ghost:hover {
+  color: var(--error);
+  background: transparent;
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.seg {
+  flex: none;
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg button {
+  border: none;
+  background: transparent;
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.seg button + button {
+  border-left: 1px solid var(--line);
+}
+.seg button.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.swatches {
+  display: flex;
+  gap: 6px;
+}
+.swatches button {
+  width: 40px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: var(--hover);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.swatches button.on {
+  border-color: var(--accent);
+}
+.swatches canvas {
+  width: 32px;
+  height: 22px;
+}
+
+.switch {
+  flex: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  border: none;
+  background: var(--line);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s;
+}
+.switch[aria-checked='true'] {
+  background: var(--accent);
+}
+.switch[aria-checked='true']::after {
+  transform: translateX(16px);
+}
+
+select {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  min-width: 160px;
+}
+
+/* ---------- 小章鱼列表 ---------- */
+.pets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pets li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+.pets li:first-child {
+  border-top: none;
+}
+.pets canvas {
+  width: 36px;
+  height: 30px;
+}
+.pets .name {
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pets .what {
+  color: var(--muted);
+  font-size: 12px;
+}
+.pets .what.alert {
+  color: var(--accent);
+  font-weight: 600;
+}
+.pet-buttons {
+  display: flex;
+  gap: 6px;
+}
+.ctx {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.ctx .bar {
+  width: 80px;
+  height: 6px;
+  background: var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ctx .bar i {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+.ctx .bar i.half {
+  background: #e2a23b;
+}
+.ctx .bar i.full {
+  background: var(--accent);
+}
+
+/* ---------- 接入 ---------- */
+.method-text {
+  min-width: 0;
+}
+.tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 4px;
+  padding: 0 6px;
+}
+.status {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  background: var(--line);
+}
+.status.ok {
+  color: var(--ok);
+}
+.status.ok::before {
+  background: var(--ok);
+}
+.note {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--error);
+  user-select: text;
+}
+
+/* ---------- 最近事件 ---------- */
+.events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12.5px;
+}
+.events li {
+  display: grid;
+  grid-template-columns: 62px 128px 1fr auto;
+  gap: 8px;
+  padding: 4px 0;
+  align-items: baseline;
+}
+.events .time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.events .ev {
+  font-family: Consolas, 'Cascadia Mono', monospace;
+  font-size: 12px;
+}
+.events .detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.events .via {
+  color: var(--muted);
+  font-size: 11px;
+}
+.events .empty {
+  display: block;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+/* ---------- 底部 ---------- */
+footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 2px 0;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* ---------- 跳到某一块（新手引导里"点我打开设置"） ---------- */
+.card.flash {
+  animation: flash 1.6s ease-out;
+}
+@keyframes flash {
+  0%, 40% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.card h2 .count {
+  margin-left: auto;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* ---------- 衣柜 ---------- */
+.wardrobe {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 4px 0 8px;
+}
+.wardrobe > canvas {
+  width: 100px;
+  height: 90px;
+  flex: none;
+  background: var(--hover);
+  border-radius: 10px;
+}
+.slots {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.slot {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.slot .label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.items button {
+  width: 40px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: var(--hover);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+.items button.on {
+  border-color: var(--accent);
+}
+.items button.locked,
+.items button.peek {
+  cursor: help;
+}
+.items button.locked canvas {
+  filter: grayscale(1);
+  opacity: 0.35;
+}
+.items canvas {
+  width: 36px;
+  height: 30px;
+}
+
+/* ---------- 成就 ---------- */
+.achievements {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px;
+}
+.achievements li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--hover);
+}
+.achievements li.locked canvas {
+  filter: grayscale(1);
+  opacity: 0.35;
+}
+.achievements canvas {
+  width: 36px;
+  height: 30px;
+}
+.achievements .name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.achievements li.locked .name {
+  color: var(--muted);
+}
+.achievements .desc {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.achievements .bar {
+  margin-top: 3px;
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.achievements .bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+/* ---------- 喂文件 ---------- */
+.path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  user-select: text;
+}

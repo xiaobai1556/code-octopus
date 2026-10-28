@@ -1,0 +1,10 @@
+{
+  "name": "code-octopus",
+  "displayName": "Code Octopus 代码小章鱼 (unofficial)",
+  "version": "0.3.0",
+  "description": "Sends Claude Code events to the Code Octopus desktop pet so the pixel octopus can react. Unofficial fan project, not affiliated with Anthropic. Requires the desktop pet app to be running.",
+  "author": {
+    "name": "xiaobai1556"
+  },
+  "license": "MIT"
+}

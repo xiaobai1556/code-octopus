@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title></title>
+    <link rel="stylesheet" href="report.css" />
+  </head>
+  <body>
+    <nav class="toolbar">
+      <div class="days">
+        <button class="icon" id="prev">◀</button>
+        <span id="day-label"></span>
+        <button class="icon" id="next">▶</button>
+      </div>
+      <div class="actions">
+        <span id="toast"></span>
+        <button class="btn" id="copy"></button>
+        <button class="btn primary" id="save"></button>
+      </div>
+    </nav>
+
+    <article id="card">
+      <header>
+        <canvas id="pet"></canvas>
+        <div>
+          <h1 id="title"></h1>
+          <p id="subtitle"></p>
+        </div>
+      </header>
+
+      <section id="empty" hidden>
+        <canvas id="sleepy"></canvas>
+        <p id="empty-text"></p>
+      </section>
+
+      <div id="content">
+        <section class="hero" id="hero"></section>
+        <section class="minor" id="minor"></section>
+
+        <section class="block">
+          <h2 id="kinds-title"></h2>
+          <div class="stack" id="kinds-bar"></div>
+          <ul class="legend" id="kinds-legend"></ul>
+        </section>
+
+        <section class="block">
+          <h2><span id="hours-title"></span><small id="peak"></small></h2>
+          <div class="hours" id="hours"></div>
+          <div class="hour-ticks"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div>
+        </section>
+
+        <section class="block two">
+          <div>
+            <h2 id="projects-title"></h2>
+            <ol class="top" id="projects"></ol>
+          </div>
+          <div>
+            <h2 id="files-title"></h2>
+            <ol class="top" id="files"></ol>
+          </div>
+        </section>
+
+        <p class="mood"><canvas id="mini"></canvas><span id="mood"></span></p>
+      </div>
+
+      <footer id="footer"></footer>
+    </article>
+
+    <script src="../src/i18n.js"></script>
+    <script src="../src/outfits.js"></script>
+    <script src="sprite.js"></script>
+    <script src="report.js"></script>
+  </body>
+</html>
