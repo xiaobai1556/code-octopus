@@ -1,6 +1,6 @@
 {
   "name": "code-octopus",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "像素风桌宠：Claude Code 干活时它也干活，需要你时它来找你",
   "main": "main.js",
   "private": true,
