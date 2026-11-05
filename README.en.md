@@ -138,6 +138,7 @@ Then open `~/.claude/settings.json` and delete every entry under `hooks` that me
 - **Achievements**: progress and unlock dates for all 21
 - **Feeding**: on/off, where the "belly" folder is, the messy-Downloads reminder, and spitting out the last meal
 - **Updates**: auto update on/off and check for updates (skipped for the development version and when no release repository is set)
+- **Backup**: export settings, achievements, stats, game scores and notes to one JSON file, then "Restore from backup" on a new computer or after reinstalling. Before restoring it saves a copy of the current data in the data folder (`before-restore-<time>.json`) and restarts afterwards; settings that only make sense on this computer, like where the belly folder is, stay as they are
 - **Today's summary**: opens the report card, and you can page back through earlier days
 - **Mini games**: opens the Octopus Arcade
 - **Connect to Claude Code**: status and switches for the two methods above (with one-click update when there's a new version), and "Approve from the pet"
@@ -180,6 +181,8 @@ Every piece of UI text and every line the octopus says lives in `src/i18n.js`. T
 | `src/stats.js` | Daily stats and running totals (saved in `%APPDATA%\claude-pet\stats.json`) |
 | `src/rng.js` | Seedable random numbers; the daily challenge uses them so everyone plays the same round on the same day |
 | `src/notify.js` | Which events get a system notification in full screen (when the octopus is hiding), and what it says |
+| `src/quiet.js` | Whether it's within quiet hours right now (ranges can wrap past midnight) |
+| `src/backup.js` | The backup file format, validation, and how settings merge on restore |
 | `src/jsonfile.js` | Saves settings, stats, notes and feeding records: writes a temp file then renames, so a crash mid-write can't corrupt the file |
 | `src/achievements.js` | Achievement conditions and rewards |
 | `src/outfits.js` | Outfit list and holiday dates (shared by the main process, overlays and settings panel) |

@@ -560,6 +560,16 @@ $('lang').onchange = (e) => {
   e.target.blur();
   update({ lang: e.target.value });
 };
+// 备份：导出 / 从备份恢复（恢复成功会重启，这里看不到结果）
+for (const [id, action] of [['backup-export', 'export'], ['backup-import', 'import']]) {
+  $(id).onclick = async () => {
+    const r = await api.backup(action);
+    const st = $('backup-status');
+    if (!r || r.canceled) return;
+    st.hidden = false;
+    setStatus(st, r.ok, r.ok ? (r.file ? tr('set.backupSaved', { file: r.file }) : '') : r.error || '');
+  };
+}
 $('autostart').onclick = async () => {
   await api.autostart(!state.autostart);
   refresh();

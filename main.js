@@ -22,6 +22,7 @@ const { writeJsonAtomic } = require('./src/jsonfile');
 const { ArcadeScores } = require('./src/arcade');
 const notify = require('./src/notify');
 const { inQuietHours } = require('./src/quiet');
+const backup = require('./src/backup');
 
 const tr = I18N.t;
 const PORT = Number(process.env.CLAUDE_PET_PORT) || 23333;
@@ -1400,6 +1401,8 @@ function registerSettingsIpc() {
     }
   });
 
+  ipcMain.handle('settings:backup', (_e, action) => (action === 'export' ? exportBackup() : action === 'import' ? importBackup() : null));
+
   ipcMain.handle('settings:autostart', (_e, on) => {
     app.setLoginItemSettings({ ...loginOpts, openAtLogin: !!on });
     return app.getLoginItemSettings(loginOpts).openAtLogin;
@@ -1490,6 +1493,76 @@ function checkReportTime() {
   if (!d || (!d.prompts && !d.toolCount)) return;
   setConfig({ lastReportDay: today });
   sendTo(cursorOverlay(), 'report-ready');
+}
+
+// ---------- 备份和恢复 ----------
+// 设置、统计（含成就）、游戏成绩、便签存成一个文件；恢复时先把现在的另存一份，替换完重启
+
+const currentBackup = () => {
+  stats.save(); // 还没写盘的统计先写下去
+  return backup.make({ config, stats: stats.data, arcade: arcade.data, notes }, app.getVersion());
+};
+
+async function exportBackup() {
+  const r = await dialog.showSaveDialog(settingsWin, {
+    defaultPath: path.join(app.getPath('documents'), `code-octopus-backup-${dayKey()}.json`),
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try {
+    writeJsonAtomic(r.filePath, currentBackup(), true);
+    return { ok: true, file: r.filePath };
+  } catch (err) {
+    return { ok: false, error: errorText(err) };
+  }
+}
+
+async function importBackup() {
+  const r = await dialog.showOpenDialog(settingsWin, { filters: [{ name: 'JSON', extensions: ['json'] }], properties: ['openFile'] });
+  if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
+  let parsed = { ok: false };
+  try {
+    parsed = backup.read(fs.readFileSync(r.filePaths[0], 'utf8'));
+  } catch {}
+  if (!parsed.ok) return { ok: false, error: tr('set.backupBad') };
+  const date = parsed.createdAt ? parsed.createdAt.slice(0, 10) : '?';
+  const answer = await dialog.showMessageBox(settingsWin, {
+    type: 'warning',
+    buttons: [tr('set.restoreGo'), tr('set.restoreCancel')],
+    defaultId: 1,
+    cancelId: 1,
+    message: tr('set.restoreConfirm', { date }),
+    detail: tr('set.restoreDetail'),
+  });
+  if (answer.response !== 0) return { ok: false, canceled: true };
+  const dir = app.getPath('userData');
+  try {
+    writeJsonAtomic(path.join(dir, `before-restore-${new Date().toISOString().replace(/[:.]/g, '-')}.json`), currentBackup(), true);
+    const d = parsed.data;
+    if (d.stats) {
+      // 写下去再用 Stats 读一遍，老版本的数据也会补齐；换掉内存里的，退出时存盘存的就是恢复的这份
+      writeJsonAtomic(path.join(dir, 'stats.json'), d.stats);
+      stats.data = new Stats(path.join(dir, 'stats.json')).data;
+      stats.save();
+    }
+    if (d.arcade) {
+      writeJsonAtomic(path.join(dir, 'arcade.json'), d.arcade);
+      arcade = new ArcadeScores(path.join(dir, 'arcade.json'));
+    }
+    if (d.notes) {
+      notes = d.notes;
+      saveNotes();
+    }
+    if (d.config) {
+      config = backup.mergeConfig(config, d.config);
+      saveConfig();
+    }
+  } catch (err) {
+    return { ok: false, error: errorText(err) };
+  }
+  app.relaunch();
+  app.quit();
+  return { ok: true };
 }
 
 // ---------- 章鱼游戏厅 ----------
