@@ -1697,6 +1697,8 @@ if (host) {
     world.transfer(pet, to, { drag: d });
   });
   host.on('achievement', ({ ids, items, sessionId }) => world.messenger(sessionId).celebrateUnlock(ids, items));
+  // 休息提醒：端一杯水过来
+  host.on('break-reminder', ({ minutes }) => world.messenger().offerWater(minutes));
   // 养成等级升级：撒彩纸，说升到几级、现在是什么称号
   host.on('level-up', ({ level, title, sessionId }) => {
     const pet = world.messenger(sessionId);

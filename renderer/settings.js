@@ -378,6 +378,18 @@ function renderPlay() {
     if (!sel.options.length) sel.append(...Array.from({ length: 24 }, (_, h) => new Option(`${h}:00`, String(h))));
     sel.value = String(config[key] ?? def);
   }
+  // 休息提醒：打开了才显示隔多久
+  $('break-reminder').setAttribute('aria-checked', String(config.breakReminder !== false));
+  $('break-min').hidden = config.breakReminder === false;
+  $('break-min').replaceChildren(
+    ...[45, 60, 90].map((m) => {
+      const b = document.createElement('button');
+      b.textContent = tr('set.minutes', { m });
+      b.className = (config.breakMin || 60) === m ? 'on' : '';
+      b.onclick = () => update({ breakMin: m });
+      return b;
+    })
+  );
   $('quiet-now').hidden = !state.quietNow;
   $('quiet-now').textContent = tr('set.quietNow');
   // 打开了但有的快捷键被别的程序占了：说是哪个
@@ -539,7 +551,7 @@ function render() {
   if (changed('achievements', [state.achievements, state.config.color, state.level])) renderAchievements();
   if (changed('fishdex', [state.catches])) renderFishdex();
   if (changed('feed', [state.config.feed, state.config.feedHint, state.config.feedDir, state.lastBite])) renderFeed();
-  if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin, state.config.hotkeys, state.hotkeys, state.config.quietHours, state.config.quietFrom, state.config.quietTo, state.quietNow])) renderPlay();
+  if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin, state.config.hotkeys, state.hotkeys, state.config.quietHours, state.config.quietFrom, state.config.quietTo, state.quietNow, state.config.breakReminder, state.config.breakMin])) renderPlay();
   if (changed('updates', [state.update, state.config.autoUpdate])) renderUpdates();
   if (changed('pets', state.pets)) renderPets();
   if (changed('events', state.events)) renderEvents();
@@ -572,6 +584,7 @@ $('dance').onclick = () => update({ dance: state.config.dance === false });
 $('time-of-day').onclick = () => update({ timeOfDay: state.config.timeOfDay === false });
 $('hotkeys').onclick = () => update({ hotkeys: !state.config.hotkeys });
 $('quiet-hours').onclick = () => update({ quietHours: !state.config.quietHours });
+$('break-reminder').onclick = () => update({ breakReminder: state.config.breakReminder === false });
 $('quiet-from').onchange = (e) => {
   e.target.blur();
   update({ quietFrom: Number(e.target.value) });

@@ -673,6 +673,12 @@ function drawPet(ctx, x, y, P, pal, flip, pose) {
     px(19, by - 1, 1, 1, '#E5484D');
     px(19, by, 1, 1, '#FFFFFF');
   }
+  // 休息提醒：递过来一杯水
+  if (has('glass')) {
+    px(16, top + 1, 3, 5, 'rgba(225,242,255,0.9)');
+    px(16, top + 3, 3, 3, '#7CC4FA');
+    px(16, top + 1, 3, 1, '#FFFFFF');
+  }
   // 举哑铃：举起来在头顶，放下在胸前（pose.lift）
   if (has('dumbbell')) {
     const row = pose.lift ? top - 3 : top + 5;

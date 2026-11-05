@@ -1120,6 +1120,13 @@ class Pet {
     }
   }
 
+  // 休息提醒：端着一杯水，提醒你起来活动、喝口水
+  offerWater(minutes) {
+    this.touch();
+    this.setMode('water', 10);
+    this.say(tr('say.break', { m: minutes }), 10, true, { sub: tr('say.breakSub') });
+  }
+
   // 拖图标：身后冒出一个假的桌面图标（只是画出来的，不是你的文件），朝平台长的那边拖过去
   startHaul() {
     const w = this.world;
@@ -1336,6 +1343,9 @@ class Pet {
       p.dx = 1;
       // 拖图标：后面那只手往回拽着，使劲
       if (this.mode === 'haul') Object.assign(p, { armL: 2, eyes: Math.floor(t / 1.5) % 3 === 2 ? 'happy' : 'down', props: Math.floor(t / 2) % 3 === 1 ? ['sweat'] : [] });
+    } else if (this.mode === 'water') {
+      // 把水杯递过来
+      Object.assign(p, { eyes: 'happy', blush: true, armR: 2, top: breathe ? 1 : 0, props: ['glass'] });
     } else if (this.mode === 'workout') {
       // 举哑铃：举过头顶、放下，举久了冒汗
       const up = t % 1.2 < 0.6;

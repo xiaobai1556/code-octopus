@@ -49,12 +49,13 @@ let tray = null;
 // lastReportDay：哪天已经提醒过看日报；outfit：穿戴的装扮；holidays：节日自动换装；
 // feed：拖文件喂它；feedDir：章鱼的肚子在哪；feedHint：下载文件夹太乱时提醒；onboarded：看过新手引导；
 // approveOnPet：在桌宠身上直接批准权限请求；dance：放歌时跳舞；timeOfDay：跟着时间变化；pomodoroMin：番茄钟多少分钟；
-// quietHours / quietFrom / quietTo：免打扰时段（几点到几点只提醒要你做决定的事、不响提示音）
+// quietHours / quietFrom / quietTo：免打扰时段（几点到几点只提醒要你做决定的事、不响提示音）；
+// breakReminder / breakMin：连续在电脑前多少分钟提醒你休息
 let config = {
   scale: 5, bubbles: 'full', collide: true, color: 0, lang: 'auto', contextWindow: 'auto', sound: true, lastReportDay: '',
   outfit: { head: '', face: '', neck: '' }, holidays: true, feed: true, feedDir: '', feedHint: true, lastHungryDay: '', onboarded: false, autoUpdate: true,
   approveOnPet: false, dance: true, timeOfDay: true, pomodoroMin: 25, notifyFullscreen: true, hotkeys: false,
-  quietHours: false, quietFrom: 22, quietTo: 8,
+  quietHours: false, quietFrom: 22, quietTo: 8, breakReminder: true, breakMin: 60,
 };
 const POMODORO_MINUTES = [15, 25, 45];
 const BUBBLE_MODES = ['alerts', 'brief', 'full'];
@@ -501,8 +502,26 @@ function checkUserIdle() {
     broadcast('user-away');
   } else if (userAway && idle < 5) {
     userAway = false;
+    workSince = Date.now();
     broadcast('user-back');
   }
+}
+
+// ---------- 休息提醒 ----------
+// 连着在电脑前 breakMin 分钟（中间没离开过 5 分钟以上），小章鱼端杯水来提醒一次，然后重新计时。
+// 免打扰时段、番茄钟进行中（它自己安排休息）、全屏看视频玩游戏时不提醒
+const BREAK_REMIND_MINUTES = [45, 60, 90];
+let workSince = Date.now();
+function checkBreak() {
+  if (userAway) {
+    workSince = Date.now();
+    return;
+  }
+  if (!config.breakReminder || Date.now() - workSince < (config.breakMin || 60) * 60000) return;
+  workSince = Date.now();
+  const o = cursorOverlay();
+  if (quietNow() || pomodoro || !o || o.hidden) return;
+  sendTo(o, 'break-reminder', { minutes: config.breakMin || 60 });
 }
 
 // ---------- 地形：窗口顶边当平台、窗口本身当实心墙 ----------
@@ -1101,7 +1120,7 @@ function startServer() {
           const state = {
             screens, pets, petDragging, dragOverlay: dragOverlay && dragOverlay.id, externalDrag, lastPressAt, buttons, captureLog, userDragging, drags, duplicatesDropped, userAway, locale: locale(),
             sessions: [...sessions].map(([id, s]) => ({ id, hwnd: s.hwnd, exe: s.exe, used: s.used, limit: contextLimit(s), costUSD: s.costUSD, screen: sessionOverlay.get(id) })),
-            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents, errors: recentErrors, toasts: recentToasts, hotkeys: hotkeyStatus, quietNow: quietNow(),
+            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents, errors: recentErrors, toasts: recentToasts, hotkeys: hotkeyStatus, quietNow: quietNow(), breakInMin: Math.round(((config.breakMin || 60) * 60000 - (Date.now() - workSince)) / 60000),
           };
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(state));
@@ -1382,8 +1401,9 @@ function registerSettingsIpc() {
     if (Number.isInteger(patch.color) && patch.color >= 0 && patch.color < 6) clean.color = patch.color;
     if (patch.lang === 'auto' || I18N.NAMES[patch.lang]) clean.lang = patch.lang;
     if (CONTEXT_WINDOWS.includes(patch.contextWindow)) clean.contextWindow = patch.contextWindow;
-    for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay', 'notifyFullscreen', 'hotkeys', 'quietHours']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
+    for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay', 'notifyFullscreen', 'hotkeys', 'quietHours', 'breakReminder']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
     for (const key of ['quietFrom', 'quietTo']) if (Number.isInteger(patch[key]) && patch[key] >= 0 && patch[key] < 24) clean[key] = patch[key];
+    if (BREAK_REMIND_MINUTES.includes(patch.breakMin)) clean.breakMin = patch.breakMin;
     if (POMODORO_MINUTES.includes(patch.pomodoroMin)) clean.pomodoroMin = patch.pomodoroMin;
     const outfit = cleanOutfit(patch.outfit);
     if (outfit) clean.outfit = outfit;
@@ -1745,6 +1765,7 @@ if (!app.requestSingleInstanceLock()) {
     setInterval(checkReportTime, 60 * 1000);
     wasQuiet = quietNow();
     setInterval(checkQuietHours, 30 * 1000);
+    setInterval(checkBreak, 30 * 1000);
     setInterval(ensurePet, 500);
     setInterval(keepOnTop, 1000);
     setTimeout(checkHunger, 10 * 60 * 1000);
