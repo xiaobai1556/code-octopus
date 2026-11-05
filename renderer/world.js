@@ -637,8 +637,16 @@ const world = {
     }
   },
   // 拖图标：在小章鱼身后冒出一个假的桌面图标
-  spawnIcon(pet) {
+  spawnIcon(pet, opts = {}) {
     this.releaseIcon(pet); // 手里已经拖着一个：先放下
+    if (opts.game) {
+      // 两只一起拖的大图标：位置由那一局摆，结束时那一局松手
+      const label = pick(tr('haul.bigItems').split('|'));
+      const icon = { label, type: 'folder', x: pet.x, y: pet.y, holder: null, game: opts.game, big: true, born: performance.now(), leftAt: 0 };
+      this.fakeIcons.push(icon);
+      this.poof(icon.x, icon.y - pet.Pd * 5);
+      return icon;
+    }
     const names = tr('haul.items').split('|');
     const label = pick(names);
     const ext = (label.match(/\.(\w+)$/) || [])[1] || '';
@@ -663,12 +671,13 @@ const world = {
     icon.leftAt = performance.now();
   },
   // 钓上来一样东西：从浮漂那儿划一道弧飞到小章鱼手里
-  catchSomething(pet) {
+  catchSomething(pet, into = null) {
     const c = CATCHES.pick();
     const x0 = pet.x + pet.facing * 11 * pet.Pd;
     const y0 = pet.y + 9 * pet.Pd;
-    const x1 = pet.x + pet.facing * pet.halfW * 0.5;
-    const y1 = pet.y - pet.height;
+    // 一起钓鱼时飞进旁边那只的桶里，不然飞到自己手里
+    const x1 = into ? into.x + into.facing * into.halfW * 1.2 : pet.x + pet.facing * pet.halfW * 0.5;
+    const y1 = into ? into.y - into.Pd * 4 : pet.y - pet.height;
     const T = 0.8;
     const g = 700;
     this.particles.push({ kind: c.glyph, x: x0, y: y0, vx: (x1 - x0) / T, vy: (y1 - y0) / T - 0.5 * g * T, g, life: T + 0.25, max: T + 0.25, size: pet.Pd * 0.8, color: c.color });
@@ -1137,6 +1146,7 @@ const ICON_STAY_MS = 7000;
 const ICON_FADE_MS = 1000;
 function updateIcons(now) {
   for (const icon of world.fakeIcons) {
+    if (icon.game) continue; // 两只一起拖的：那一局管
     // 被叫去干活、被拖起来、被转到别的屏，或者它手里换成了别的图标：松手
     const pet = icon.holder;
     if (pet && (!world.pets.includes(pet) || !['haul', 'haulStart'].includes(pet.mode) || pet.haulIcon !== icon)) {
@@ -1146,12 +1156,12 @@ function updateIcons(now) {
     }
     if (icon.holder) world.followIcon(icon);
   }
-  world.fakeIcons = world.fakeIcons.filter((icon) => icon.holder || now - icon.leftAt < ICON_STAY_MS + ICON_FADE_MS);
+  world.fakeIcons = world.fakeIcons.filter((icon) => icon.holder || icon.game || now - icon.leftAt < ICON_STAY_MS + ICON_FADE_MS);
 }
 
 function iconAlpha(icon, now) {
   const appear = Math.min(1, (now - icon.born) / 250);
-  const fade = icon.holder ? 1 : 1 - Math.max(0, now - icon.leftAt - ICON_STAY_MS) / ICON_FADE_MS;
+  const fade = icon.holder || icon.game ? 1 : 1 - Math.max(0, now - icon.leftAt - ICON_STAY_MS) / ICON_FADE_MS;
   return Math.max(0, Math.min(appear, fade));
 }
 
@@ -1161,7 +1171,7 @@ function drawIcons(now) {
   for (const icon of world.fakeIcons) {
     const a = iconAlpha(icon, now);
     if (a <= 0) continue;
-    const u = Math.max(1, Math.round(2.8 * dpr)); // 一格多少设备像素
+    const u = Math.max(1, Math.round((icon.big ? 4.4 : 2.8) * dpr)); // 一格多少设备像素（两只一起拖的大一圈）
     const x0 = Math.round(icon.x * dpr - 6 * u);
     const y0 = Math.round(icon.y * dpr - 13 * u);
     const r = (x, y, w, h, c) => {

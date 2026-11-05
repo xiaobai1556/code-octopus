@@ -77,12 +77,16 @@ const games = {
       group = walkable;
       kinds.push('stack');
       const [x1, x2] = this.span(group[0]);
-      if (x2 - x1 > 340) kinds.push('conga');
+      if (x2 - x1 > 340) kinds.push('conga', 'cohaul');
+      // 站在窗口上、离边不远：一只钓鱼一只拿桶
+      if (group[0].ground.id !== 'floor' && x2 - x1 > 260) kinds.push('cofish');
     }
     if (!kinds.length) return false;
     const kind = pick(kinds);
     if (kind === 'ball') this.start(new BallGame(this, pair));
     else if (kind === 'conga') this.start(new CongaGame(this, group.slice(0, 5)));
+    else if (kind === 'cohaul') this.start(new CoHaulGame(this, group.slice(0, 2)));
+    else if (kind === 'cofish') this.start(new CoFishGame(this, group.slice(0, 2)));
     else this.start(new StackGame(this, group.slice(0, 4)));
     return true;
   },
@@ -571,6 +575,174 @@ class CongaGame {
     const beat = Math.floor(this.t * 3) % 2;
     Object.assign(p, { eyes: 'happy', armL: beat ? 'high' : 4, armR: beat ? 4 : 'high', blush: true, dx: 1 });
     p.hop = Math.abs(Math.sin(this.t * Math.PI * 3)) * 3;
+    return true;
+  }
+}
+
+// ---------- 合力拖大图标：前面一只拉、后面一只推，中间一个大文件夹（假的，只是画出来的） ----------
+class CoHaulGame {
+  constructor(g, group) {
+    this.kind = 'cohaul';
+    this.g = g;
+    const [x1, x2] = g.span(group[0]);
+    const mid = (group[0].x + group[1].x) / 2;
+    this.dir = x2 - mid > mid - x1 ? 1 : -1;
+    // 拉的在前面，推的在后面
+    const sorted = group.slice().sort((a, b) => (b.x - a.x) * this.dir);
+    this.puller = sorted[0];
+    this.pusher = sorted[1];
+    this.members = group;
+    this.t = 0;
+    this.dur = rand(6, 9);
+    this.phase = 'gather';
+  }
+
+  begin() {
+    this.puller.say(tr('game.cohaul'), 1.8);
+    this.icon = this.g.world.spawnIcon(this.puller, { game: this });
+    this.placeIcon();
+  }
+
+  iconW() {
+    return this.puller.Pd * 12;
+  }
+
+  placeIcon() {
+    if (!this.icon) return;
+    this.icon.x = this.puller.x - this.dir * (this.puller.halfW + this.iconW() / 2 + 2);
+    this.icon.y = this.puller.y;
+  }
+
+  update(dt) {
+    if (!this.members.every((p) => this.g.stillIn(p) && p.ground)) return this.end(false);
+    this.t += dt;
+    for (const p of this.members) p.touch();
+    this.placeIcon();
+    if (this.phase === 'haul' && this.t > this.dur) this.end(true);
+  }
+
+  end(ok) {
+    if (this.icon) {
+      this.icon.game = null;
+      this.icon.leftAt = performance.now();
+      this.icon = null;
+    }
+    if (ok) for (const p of this.members) p.doEmote('cheer', 1.2);
+    this.g.finish(this);
+  }
+
+  abort() {
+    if (this.icon) {
+      this.icon.game = null;
+      this.icon.leftAt = performance.now();
+      this.icon = null;
+    }
+  }
+
+  behave(pet, dt) {
+    if (pet === this.puller) {
+      pet.facing = this.dir;
+      if (this.phase !== 'haul') return true;
+      const r = pet.step(this.dir, WALK_SPEED * 0.5, dt, 'turn');
+      if (r !== 'ok') this.end(true);
+      return true;
+    }
+    // 推的那只：走到图标后面贴着
+    const tx = this.icon ? this.icon.x - this.dir * (this.iconW() / 2 + pet.halfW + 1) : pet.x;
+    const d = tx - pet.x;
+    if (Math.abs(d) > 1.5) pet.step(Math.sign(d), clamp(Math.abs(d) * 4, WALK_SPEED, RUN_SPEED * 0.6), dt, 'turn', tx);
+    else if (this.phase === 'gather') {
+      this.phase = 'haul';
+      this.t = 0;
+    }
+    pet.facing = this.dir;
+    return true;
+  }
+
+  pose(pet, p) {
+    walkLegs(pet, p);
+    const strain = Math.floor(this.t / 1.6) % 3 === 2;
+    if (pet === this.puller) Object.assign(p, { eyes: strain ? 'down' : 'happy', armL: 2, props: strain ? ['sweat'] : [] });
+    else Object.assign(p, { eyes: strain ? 'down' : 'happy', armR: 3, armL: 3, top: 1 });
+    p.dx = 1;
+    return true;
+  }
+}
+
+// ---------- 一起钓鱼：一只坐在窗口边上钓，另一只坐旁边拿着桶接 ----------
+class CoFishGame {
+  constructor(g, group) {
+    this.kind = 'cofish';
+    this.g = g;
+    const [x1, x2] = g.span(group[0]);
+    const mid = (group[0].x + group[1].x) / 2;
+    this.dir = x2 - mid < mid - x1 ? 1 : -1; // 朝近的那一边钓
+    const sorted = group.slice().sort((a, b) => (b.x - a.x) * this.dir);
+    this.angler = sorted[0];
+    this.helper = sorted[1];
+    this.members = group;
+    const Pd = this.angler.Pd;
+    this.spotA = this.dir > 0 ? x2 - 6 * Pd : x1 + 6 * Pd;
+    this.spotB = this.spotA - this.dir * (this.angler.halfW + this.helper.halfW + 6 * Pd);
+    this.t = 0;
+    this.dur = rand(14, 20);
+    this.phase = 'gather';
+    this.biteAt = rand(2, 3.5);
+    this.bite = 0;
+    this.caughtAt = -9;
+  }
+
+  begin() {
+    this.angler.say(tr('game.cofish'), 1.8);
+  }
+
+  update(dt) {
+    if (!this.members.every((p) => this.g.stillIn(p) && p.ground)) return this.g.finish(this);
+    for (const p of this.members) p.touch();
+    if (this.phase === 'gather') {
+      if (Math.abs(this.angler.x - this.spotA) < 0.6 && Math.abs(this.helper.x - this.spotB) < 0.6) {
+        this.phase = 'fish';
+        this.t = 0;
+      }
+      return;
+    }
+    this.t += dt;
+    if (!this.bite && this.t >= this.biteAt) this.bite = 0.9;
+    else if (this.bite) {
+      this.bite -= dt;
+      if (this.bite <= 0) {
+        this.bite = 0;
+        this.caughtAt = this.t;
+        this.biteAt = this.t + rand(2.5, 4.5);
+        this.g.world.catchSomething(this.angler, this.helper);
+      }
+    }
+    if (this.t > this.dur) {
+      for (const p of this.members) p.doEmote('cheer', 1.2);
+      this.g.finish(this);
+    }
+  }
+
+  behave(pet, dt) {
+    const tx = pet === this.angler ? this.spotA : this.spotB;
+    const d = tx - pet.x;
+    if (Math.abs(d) > 0.5) {
+      const r = pet.step(Math.sign(d), WALK_SPEED * 1.2, dt, 'turn', tx);
+      if (r !== 'ok' && Math.abs(tx - pet.x) > 0.5) this.g.finish(this);
+    }
+    if (this.phase === 'fish' || Math.abs(d) <= 0.5) pet.facing = this.dir;
+    return true;
+  }
+
+  pose(pet, p) {
+    if (this.phase === 'gather') {
+      walkLegs(pet, p);
+      p.eyes = 'happy';
+      return true;
+    }
+    const justCaught = this.t - this.caughtAt < 1;
+    if (pet === this.angler) Object.assign(p, { top: 2, sit: true, armR: this.bite ? 2 : 3, eyes: this.bite ? 'wide' : justCaught ? 'happy' : 'down', dx: 1, props: ['rod'], line: 9 + (this.bite ? 2 : Math.sin(this.t * 2) * 0.6), bite: !!this.bite });
+    else Object.assign(p, { top: 2, sit: true, eyes: justCaught ? 'happy' : this.bite ? 'wide' : 'open', dx: 1, armL: justCaught ? 'high' : 5, armR: justCaught ? 'high' : 5, blush: justCaught, props: ['bucket'] });
     return true;
   }
 }

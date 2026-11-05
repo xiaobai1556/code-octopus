@@ -940,6 +940,11 @@ class Pet {
   behave(dt) {
     const w = this.world;
     if (this.haulIcon && this.mode !== 'haul' && this.mode !== 'haulStart') w.releaseIcon(this);
+    // 探头探到一半被打断（被叫去干活、问候之类）：马上回到屏幕里面，别卡在外面
+    if (this.peekSide && this.mode !== 'peek' && this.mode !== 'peekWalk') {
+      this.peekSide = null;
+      this.x = clamp(this.x, this.halfW, w.width - this.halfW);
+    }
     if (this.leaving) {
       this.mode = 'run';
       this.step(this.exitDir, RUN_SPEED * 0.6, dt, 'fall');
@@ -1049,6 +1054,42 @@ class Pet {
         }
         if (this.modeT <= 0) this.pickNext();
         break;
+      case 'peekWalk': {
+        const r = this.step(this.facing, WALK_SPEED, dt, 'turn');
+        if (this.mode !== 'peekWalk') break;
+        if (r === 'blocked') {
+          this.setMode('peek', 8);
+          this.peekT = 0;
+        } else if (r !== 'ok' || this.modeT <= 0) this.setMode('idle', rand(1, 2));
+        break;
+      }
+      case 'peek': {
+        // 缩出去 → 藏一会儿 → 探出半个脑袋 → 缩回去 → 走回来
+        const t = (this.peekT += dt);
+        const hw = this.halfW;
+        const out = -hw - 2;
+        const peek = -hw * 0.15;
+        const ease = (k) => k * k * (3 - 2 * k);
+        let d;
+        if (t < 0.6) d = hw + (out - hw) * ease(t / 0.6);
+        else if (t < 1.8) d = out;
+        else if (t < 2.3) d = out + (peek - out) * ease((t - 1.8) / 0.5);
+        else if (t < 5.5) d = peek;
+        else if (t < 5.8) d = peek + (out - peek) * ease((t - 5.5) / 0.3);
+        else if (t < 6.6) d = out;
+        else if (t < 7.4) d = out + (hw - out) * ease((t - 6.6) / 0.8);
+        else {
+          this.x = this.peekX(hw);
+          this.setMode('idle', rand(1, 2));
+          break;
+        }
+        const nx = this.peekX(d);
+        this.walkDist += Math.abs(nx - this.x);
+        this.x = nx;
+        const inward = this.peekSide === 'left' ? 1 : -1;
+        this.facing = t < 0.6 ? -inward : inward;
+        break;
+      }
       case 'bubbles':
         // 吹泡泡：隔一会儿吹出一个
         this.bubbleT -= dt;
@@ -1113,8 +1154,10 @@ class Pet {
       this.startHaul();
     } else if (r < 0.96) {
       if (!this.startFishing()) this.setMode('idle', rand(1, 3));
-    } else if (r < 0.98) {
+    } else if (r < 0.975) {
       this.setMode('workout', rand(4, 7));
+    } else if (r < 0.99) {
+      if (!this.startPeek()) this.setMode('idle', rand(1, 3));
     } else {
       this.setMode('dance', rand(2.5, 4));
     }
@@ -1151,6 +1194,24 @@ class Pet {
     this.facing = toLeft ? -1 : 1;
     this.setMode('fishWalk', 12);
     return true;
+  }
+
+  // 探头：站在屏幕最底下、那边没有别的屏时，走到屏幕边缩出去，再探出半个脑袋看看你
+  startPeek() {
+    const w = this.world;
+    if (!this.ground || this.ground.id !== 'floor') return false;
+    const side = this.x < w.width / 2 ? 'left' : 'right';
+    if (w.exitAt(side, this)) return false;
+    if ((side === 'left' ? this.x : w.width - this.x) > 600) return false;
+    this.peekSide = side;
+    this.facing = side === 'left' ? -1 : 1;
+    this.setMode('peekWalk', 16);
+    return true;
+  }
+
+  // 探头时离屏幕边多远（身体中心；负数是在屏幕外面）
+  peekX(d) {
+    return this.peekSide === 'left' ? d : this.world.width - d;
   }
 
   // 先竖直跳到比目标高一点的地方，再横着落上去（这样不会穿过窗口侧面）
@@ -1350,6 +1411,15 @@ class Pet {
       // 举哑铃：举过头顶、放下，举久了冒汗
       const up = t % 1.2 < 0.6;
       Object.assign(p, { top: up ? 0 : 1, eyes: up ? 'down' : 'happy', armL: up ? 'high' : 5, armR: up ? 'high' : 5, props: t % 7 > 4 ? ['dumbbell', 'sweat'] : ['dumbbell'], lift: up });
+    } else if (this.mode === 'peek') {
+      // 探出来的时候瞪大眼睛看着你，过一会儿眯眼笑
+      const t = this.peekT || 0;
+      const moving = t < 0.6 || (t >= 1.8 && t < 2.3) || t >= 6.6;
+      if (moving) p.legs = Math.floor(this.walkDist / (this.Pd * 2)) % 2 ? 'walk0' : 'walk1';
+      else Object.assign(p, { eyes: t < 3.2 ? 'wide' : t < 4.6 ? 'open' : 'happy', dx: 1, blush: t > 4.6, top: 1 });
+    } else if (this.mode === 'peekWalk') {
+      p.legs = Math.floor(this.walkDist / (this.Pd * 2)) % 2 ? 'walk0' : 'walk1';
+      p.dx = 1;
     } else if (this.mode === 'haulStart') {
       // 回头看一眼：身后怎么冒出来一个图标
       Object.assign(p, { eyes: 'wide', dx: -1, armL: 'high' });
