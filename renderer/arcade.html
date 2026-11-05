@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title></title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #151824;
+        user-select: none;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        outline: none;
+        touch-action: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="screen" tabindex="0"></canvas>
+    <script src="../src/i18n.js"></script>
+    <script src="../src/outfits.js"></script>
+    <script src="../src/arcade-cards.js"></script>
+    <script src="sprite.js"></script>
+    <script src="arcade.js"></script>
+    <script src="arcade-bugs.js"></script>
+    <script src="arcade-hop.js"></script>
+    <script src="arcade-approve.js"></script>
+  </body>
+</html>

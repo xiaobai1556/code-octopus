@@ -1557,6 +1557,16 @@ if (host) {
     const pet = world.pets.find((p) => !p.activity && !p.leaving && !p.leaveAt && !p.visitor && !p.game);
     if (pet) pet.hungry(count);
   });
+  // 在游戏厅里破了纪录：来一只替你庆祝
+  host.on('arcade-record', ({ game, score }) => {
+    const pet = world.messenger();
+    pet.touch();
+    pet.doEmote('cheer', 2);
+    world.confetti(pet);
+    world.sparkles(pet);
+    world.sound('unlock');
+    pet.say(tr('arc.recordSay', { game: tr(`${game}.name`), n: score }), 4.5, false, { sub: tr('arc.recordSub') });
+  });
   host.on('update-ready', ({ version }) => world.messenger().say(tr('say.updateReady', { version }), 6, false, { sub: tr('say.updateSub') }));
   host.on('tour', ({ connected }) => {
     if (world.tour) return;

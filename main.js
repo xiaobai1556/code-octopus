@@ -19,6 +19,7 @@ const updater = require('./src/updater');
 const I18N = require('./src/i18n');
 const { trayIcon } = require('./src/icon');
 const { writeJsonAtomic } = require('./src/jsonfile');
+const { ArcadeScores } = require('./src/arcade');
 
 const tr = I18N.t;
 const PORT = Number(process.env.CLAUDE_PET_PORT) || 23333;
@@ -53,6 +54,8 @@ const POMODORO_MINUTES = [15, 25, 45];
 const BUBBLE_MODES = ['alerts', 'brief', 'full'];
 const CONTEXT_WINDOWS = ['auto', 200000, 1000000];
 let reportWin = null;
+let arcadeWin = null;
+let arcade = null; // 章鱼游戏厅的成绩
 let stats = null;
 let feeder = null;
 const recentEvents = []; // 最近收到的事件，/state 和设置面板里能看到，方便排查 hooks 有没有接上
@@ -1187,6 +1190,7 @@ function buildMenu(pet, o) {
   }
   items.push({ label: tr('menu.settings'), click: () => openSettings() });
   items.push({ label: tr('menu.report'), click: () => openReport() });
+  items.push({ label: tr('menu.arcade'), click: () => openArcade() });
   items.push({
     label: tr('menu.size'),
     submenu: [4, 5, 6, 8].map((scale) => ({
@@ -1302,6 +1306,7 @@ function registerSettingsIpc() {
     if (name === 'demo') sendTo(cursorOverlay(), 'demo');
     else if (name === 'summon') summon();
     else if (name === 'report') openReport();
+    else if (name === 'arcade') openArcade();
     else if (name === 'tour') startTour(true);
     else if (name === 'quit') app.quit();
     else if (name === 'open-belly') openFolder(config.feedDir);
@@ -1406,6 +1411,51 @@ function checkReportTime() {
   sendTo(cursorOverlay(), 'report-ready');
 }
 
+// ---------- 章鱼游戏厅 ----------
+// 独立的游戏窗口（renderer/arcade.html）：捉虫、窗口跳跳、批准还是拒绝。游戏里的小章鱼用你设置的颜色和装扮；
+// 破了纪录，桌面上的小章鱼跑来替你庆祝
+
+function openArcade() {
+  if (arcadeWin && !arcadeWin.isDestroyed()) {
+    if (arcadeWin.isMinimized()) arcadeWin.restore();
+    arcadeWin.show();
+    arcadeWin.focus();
+    return;
+  }
+  arcadeWin = new BrowserWindow({
+    width: 760,
+    height: 520,
+    minWidth: 480,
+    minHeight: 340,
+    useContentSize: true,
+    show: false,
+    icon: trayIcon(),
+    autoHideMenuBar: true,
+    backgroundColor: '#1D2130',
+    webPreferences: { preload: path.join(__dirname, 'arcade-preload.js') },
+  });
+  arcadeWin.removeMenu();
+  arcadeWin.loadFile(path.join(__dirname, 'renderer', 'arcade.html'));
+  arcadeWin.once('ready-to-show', () => arcadeWin.show());
+  arcadeWin.on('closed', () => (arcadeWin = null));
+}
+
+function registerArcadeIpc() {
+  ipcMain.handle('arcade:info', () => ({
+    locale: locale(),
+    color: config.color,
+    outfit: OUTFITS.effective(config.outfit, config.holidays),
+    sound: config.sound !== false,
+    scores: arcade.summary(),
+  }));
+  ipcMain.handle('arcade:score', (_e, game, score) => {
+    const r = arcade.record(game, score);
+    // 破了以前的纪录（第一局不算）：桌面上的小章鱼来庆祝
+    if (r && r.record && r.prev > 0) sendTo(cursorOverlay(), 'arcade-record', { game, score: r.best });
+    return r;
+  });
+}
+
 // ---------- 覆盖层发来的消息 ----------
 
 function registerOverlayIpc() {
@@ -1480,11 +1530,13 @@ if (!app.requestSingleInstanceLock()) {
       saveConfig();
     }
     stats = new Stats(path.join(app.getPath('userData'), 'stats.json'));
+    arcade = new ArcadeScores(path.join(app.getPath('userData'), 'arcade.json'));
     feeder = new Feeder(path.join(app.getPath('userData'), 'feed-log.json'), [app.getAppPath(), app.getPath('userData'), path.dirname(process.execPath)]);
     pendingUnlocks = achievements.evaluate(stats);
     registerOverlayIpc();
     registerSettingsIpc();
     registerReportIpc();
+    registerArcadeIpc();
     syncOverlays();
     createTray();
     startServer();
@@ -1493,6 +1545,7 @@ if (!app.requestSingleInstanceLock()) {
     });
 
     if (process.argv.includes('--settings')) openSettings();
+    if (process.argv.includes('--arcade')) openArcade();
     scanLoop();
     mouseLoop();
     setInterval(checkUserIdle, 5000);
@@ -1518,8 +1571,8 @@ if (!app.requestSingleInstanceLock()) {
     process.on('uncaughtException', (err) => noteError('uncaught', err));
     process.on('unhandledRejection', (err) => noteError('rejection', err));
   });
-  // 再启动一次：带 --settings 就打开设置面板，否则把桌宠叫到屏幕中间
-  app.on('second-instance', (_e, argv) => (argv.includes('--settings') ? openSettings() : summon()));
+  // 再启动一次：带 --settings 就打开设置面板，带 --arcade 打开游戏厅，否则把桌宠叫到屏幕中间
+  app.on('second-instance', (_e, argv) => (argv.includes('--settings') ? openSettings() : argv.includes('--arcade') ? openArcade() : summon()));
   app.on('before-quit', () => (quitting = true));
   app.on('window-all-closed', () => app.quit());
 }

@@ -526,6 +526,7 @@ $('spit').onclick = () => api.action('spit').then(refresh);
 $('tour').onclick = () => api.action('tour');
 $('sound').onclick = () => update({ sound: state.config.sound === false });
 $('report').onclick = () => api.action('report');
+$('arcade').onclick = () => api.action('arcade');
 $('lang').onchange = (e) => {
   e.target.blur();
   update({ lang: e.target.value });
