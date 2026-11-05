@@ -193,6 +193,8 @@ Every piece of UI text and every line the octopus says lives in `src/i18n.js`. T
 | `src/stats.js` | Daily stats and running totals (saved in `%APPDATA%\claude-pet\stats.json`) |
 | `src/rng.js` | Seedable random numbers; the daily challenge uses them so everyone plays the same round on the same day |
 | `src/notify.js` | Which events get a system notification in full screen (when the octopus is hiding), and what it says |
+| `src/config.js` | Settings defaults, upgrading older config files, validating changes from the settings panel |
+| `src/reminders.js` | When the break and cost reminders are due, and the `/octopus` summary |
 | `src/quiet.js` | Whether it's within quiet hours right now (ranges can wrap past midnight) |
 | `src/backup.js` | The backup file format, validation, and how settings merge on restore |
 | `src/catches.js` | The fishing log: what can be caught and how often |

@@ -23,6 +23,8 @@ const { ArcadeScores } = require('./src/arcade');
 const notify = require('./src/notify');
 const { inQuietHours } = require('./src/quiet');
 const backup = require('./src/backup');
+const CONFIG = require('./src/config');
+const REMIND = require('./src/reminders');
 const LEVEL = require('./src/level');
 
 const tr = I18N.t;
@@ -44,22 +46,8 @@ let scanTimer = null;
 
 let settingsWin = null;
 let tray = null;
-// bubbles：alerts 只提醒 / brief 简洁 / full 详细；collide：窗口是不是实心的；
-// contextWindow：算"饱腹度"用的上下文窗口大小，auto 或 200000 / 1000000；sound：提示音；
-// lastReportDay：哪天已经提醒过看日报；outfit：穿戴的装扮；holidays：节日自动换装；
-// feed：拖文件喂它；feedDir：章鱼的肚子在哪；feedHint：下载文件夹太乱时提醒；onboarded：看过新手引导；
-// approveOnPet：在桌宠身上直接批准权限请求；dance：放歌时跳舞；timeOfDay：跟着时间变化；pomodoroMin：番茄钟多少分钟；
-// quietHours / quietFrom / quietTo：免打扰时段（几点到几点只提醒要你做决定的事、不响提示音）；
-// breakReminder / breakMin：连续在电脑前多少分钟提醒你休息；costAlert：当天花费超过多少美元提醒一次（0 是关）
-let config = {
-  scale: 5, bubbles: 'full', collide: true, color: 0, lang: 'auto', contextWindow: 'auto', sound: true, lastReportDay: '',
-  outfit: { head: '', face: '', neck: '' }, holidays: true, feed: true, feedDir: '', feedHint: true, lastHungryDay: '', onboarded: false, autoUpdate: true,
-  approveOnPet: false, dance: true, timeOfDay: true, pomodoroMin: 25, notifyFullscreen: true, hotkeys: false,
-  quietHours: false, quietFrom: 22, quietTo: 8, breakReminder: true, breakMin: 60, costAlert: 0,
-};
-const POMODORO_MINUTES = [15, 25, 45];
-const BUBBLE_MODES = ['alerts', 'brief', 'full'];
-const CONTEXT_WINDOWS = ['auto', 200000, 1000000];
+// 设置：默认值、老版本升级、设置面板改动的校验都在 src/config.js
+let config = CONFIG.defaults();
 let reportWin = null;
 let arcadeWin = null;
 let arcade = null; // 章鱼游戏厅的成绩
@@ -85,12 +73,7 @@ function loadConfig() {
     saved = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
   } catch {}
   if (!saved) return;
-  // 旧版的"安静模式"开关换成了气泡三档
-  if (saved.bubbles == null && typeof saved.quiet === 'boolean') saved.bubbles = saved.quiet ? 'alerts' : 'full';
-  delete saved.quiet;
-  // 从老版本升级上来的不再弹新手引导
-  if (saved.onboarded == null) saved.onboarded = true;
-  config = { ...config, ...saved, outfit: { ...config.outfit, ...(saved.outfit || {}) } };
+  config = CONFIG.fromSaved(saved);
 }
 
 function saveConfig() {
@@ -510,19 +493,17 @@ function checkUserIdle() {
 // ---------- 休息提醒 ----------
 // 连着在电脑前 breakMin 分钟（中间没离开过 5 分钟以上），小章鱼端杯水来提醒一次，然后重新计时。
 // 免打扰时段、番茄钟进行中（它自己安排休息）、全屏看视频玩游戏时不提醒
-const BREAK_REMIND_MINUTES = [45, 60, 90];
-const COST_ALERTS = [0, 5, 10, 20, 50];
 let workSince = Date.now();
 function checkBreak() {
   if (userAway) {
     workSince = Date.now();
     return;
   }
-  if (!config.breakReminder || Date.now() - workSince < (config.breakMin || 60) * 60000) return;
-  workSince = Date.now();
   const o = cursorOverlay();
-  if (quietNow() || pomodoro || !o || o.hidden) return;
-  sendTo(o, 'break-reminder', { minutes: config.breakMin || 60 });
+  const due = REMIND.breakDue({ now: Date.now(), workSince, enabled: config.breakReminder, minutes: config.breakMin || 60, quiet: quietNow(), pomodoro: !!pomodoro, hidden: !o || o.hidden });
+  if (!due) return;
+  workSince = Date.now(); // 到点了：提醒或者跳过，都重新计时
+  if (due === 'remind') sendTo(o, 'break-reminder', { minutes: config.breakMin || 60 });
 }
 
 // ---------- 地形：窗口顶边当平台、窗口本身当实心墙 ----------
@@ -743,37 +724,17 @@ function onHookRequest(url, text, remotePort) {
 
 // 花费提醒：当天花费第一次超过设的金额，提醒一次（免打扰时段里先不说，过了再说）
 function checkCost(target, sessionId) {
-  const limit = config.costAlert;
   const d = stats.get(dayKey());
-  if (!limit || !d || d.costAlerted || (d.costUSD || 0) < limit || quietNow()) return;
+  if (!REMIND.costDue(d, config.costAlert, quietNow())) return;
   d.costAlerted = true;
   stats.scheduleSave();
-  sendTo(target || cursorOverlay(), 'cost-alert', { spent: d.costUSD, limit, sessionId });
+  sendTo(target || cursorOverlay(), 'cost-alert', { spent: d.costUSD, limit: config.costAlert, sessionId });
 }
 
 // /summary 的内容：今天的数字、等级、钓鱼图鉴
 function todaySummary() {
-  const d = (stats && stats.get(dayKey())) || null;
   const lv = LEVEL.levelOf(LEVEL.xpOf(stats ? stats.data.totals : {}));
-  const h = Math.floor(((d && d.busyMs) || 0) / 3600000);
-  const m = Math.round((((d && d.busyMs) || 0) % 3600000) / 60000);
-  return {
-    app: 'code-octopus',
-    date: dayKey(),
-    busy: `${h}h ${m}m`,
-    messages: (d && d.prompts) || 0,
-    toolCalls: (d && d.toolCount) || 0,
-    testsPassed: (d && d.tests.pass) || 0,
-    testsFailed: (d && d.tests.fail) || 0,
-    commits: (d && d.commits) || 0,
-    pushes: (d && d.pushes) || 0,
-    lastCommits: ((d && d.commitLog) || []).slice(-3).map((c) => c.text).filter(Boolean),
-    costUSD: Math.round(((d && d.costUSD) || 0) * 100) / 100,
-    level: lv.level,
-    title: tr(`level.${lv.title}`),
-    xp: `${lv.xp} / ${lv.next}`,
-    language: locale(),
-  };
+  return REMIND.todaySummary({ date: dayKey(), day: stats && stats.get(dayKey()), level: lv, title: tr(`level.${lv.title}`), language: locale() });
 }
 
 // 养成等级：经验涨过了下一级，让那只小章鱼庆祝一下。第一次（还没记过等级）只记下来，不补庆祝
@@ -1444,19 +1405,8 @@ function registerSettingsIpc() {
   });
 
   ipcMain.handle('settings:set', (_e, patch) => {
-    const clean = {};
-    if ([4, 5, 6, 8].includes(patch.scale)) clean.scale = patch.scale;
-    if (BUBBLE_MODES.includes(patch.bubbles)) clean.bubbles = patch.bubbles;
-    if (typeof patch.collide === 'boolean') clean.collide = patch.collide;
-    if (Number.isInteger(patch.color) && patch.color >= 0 && patch.color < 6) clean.color = patch.color;
-    if (patch.lang === 'auto' || I18N.NAMES[patch.lang]) clean.lang = patch.lang;
-    if (CONTEXT_WINDOWS.includes(patch.contextWindow)) clean.contextWindow = patch.contextWindow;
-    for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay', 'notifyFullscreen', 'hotkeys', 'quietHours', 'breakReminder']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
-    for (const key of ['quietFrom', 'quietTo']) if (Number.isInteger(patch[key]) && patch[key] >= 0 && patch[key] < 24) clean[key] = patch[key];
-    if (BREAK_REMIND_MINUTES.includes(patch.breakMin)) clean.breakMin = patch.breakMin;
-    if (COST_ALERTS.includes(patch.costAlert)) clean.costAlert = patch.costAlert;
-    if (POMODORO_MINUTES.includes(patch.pomodoroMin)) clean.pomodoroMin = patch.pomodoroMin;
-    const outfit = cleanOutfit(patch.outfit);
+    const clean = CONFIG.cleanPatch(patch, I18N.NAMES);
+    const outfit = cleanOutfit(patch && patch.outfit);
     if (outfit) clean.outfit = outfit;
     setConfig(clean);
     if ('autoUpdate' in clean) updater.setEnabled(clean.autoUpdate);

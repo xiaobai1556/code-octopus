@@ -190,6 +190,8 @@ claude plugin marketplace remove code-octopus
 | `src/stats.js` | 每日统计和累计数字（存在 `%APPDATA%\claude-pet\stats.json`） |
 | `src/rng.js` | 可以播种的随机数，今日挑战用它让同一天大家玩同一局 |
 | `src/notify.js` | 全屏时（小章鱼躲起来）哪些事要弹系统通知、写什么 |
+| `src/config.js` | 设置的默认值、老版本升级、设置面板发来的改动怎么校验 |
+| `src/reminders.js` | 休息提醒、花费提醒什么时候该说，`/octopus` 的今日小结 |
 | `src/quiet.js` | 现在是不是在免打扰时段里（可以跨午夜） |
 | `src/backup.js` | 备份文件的格式、校验，恢复时设置怎么合并 |
 | `src/catches.js` | 钓鱼图鉴：能钓上来什么、多常见 |
