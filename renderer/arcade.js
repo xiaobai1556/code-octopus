@@ -209,6 +209,27 @@ const g = {
     ctx.fillStyle = grad;
     ctx.fillRect(x0, y0, px(x + w) - x0, py(y + h) - y0);
   },
+  line(x1, y1, x2, y2, color, w = 1) {
+    ctx.beginPath();
+    ctx.moveTo(px(x1), py(y1));
+    ctx.lineTo(px(x2), py(y2));
+    ctx.lineWidth = Math.max(1, w * s);
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  },
+  circle(x, y, r, fill, stroke, w = 1) {
+    ctx.beginPath();
+    ctx.arc(px(x), py(y), r * s, 0, Math.PI * 2);
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (stroke) {
+      ctx.lineWidth = Math.max(1, w * s);
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+    }
+  },
   shake(dx, dy) {
     shiftX = dx;
     shiftY = dy;
@@ -247,6 +268,8 @@ function shade(hex, k) {
 const KEYMAP = {
   ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
   Space: 'space', Enter: 'enter', NumpadEnter: 'enter', Escape: 'esc', KeyP: 'pause', KeyQ: 'quit', KeyY: 'yes', KeyN: 'no', KeyR: 'retry',
+  Digit1: 'n1', Digit2: 'n2', Digit3: 'n3', Digit4: 'n4', Numpad1: 'n1', Numpad2: 'n2', Numpad3: 'n3', Numpad4: 'n4',
+  KeyU: 'upgrade', KeyX: 'sell', Delete: 'sell', Backspace: 'sell', KeyF: 'fast',
 };
 
 const input = {
@@ -275,11 +298,18 @@ const input = {
   pointerActive() {
     return !!this.pointer && performance.now() - this.pointerAt < 1500;
   },
+  // 左键点在这块里：吃掉这次点击
   takeClick(r) {
-    const i = this.clicks.findIndex((p) => inside(p, r));
+    const i = this.clicks.findIndex((p) => p.button === 0 && inside(p, r));
     if (i < 0) return false;
     this.clicks.splice(i, 1);
     return true;
+  },
+  // 右键点了一下（在哪儿都算）
+  takeAltClick() {
+    const i = this.clicks.findIndex((p) => p.button === 2);
+    if (i < 0) return null;
+    return this.clicks.splice(i, 1)[0];
   },
 };
 
@@ -313,7 +343,7 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.focus();
   input.pointer = toLogical(e);
   input.pointerAt = performance.now();
-  input.clicks.push({ ...input.pointer });
+  input.clicks.push({ ...input.pointer, button: e.button });
 });
 canvas.addEventListener('pointerleave', () => (input.pointer = null));
 window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -435,7 +465,15 @@ const CARD_W = 106;
 const CARD_H = 140;
 const CARD_GAP = 10;
 const CARD_Y = 62;
+const grid = () => ARCADE.games.length > 3;
+const GRID_W = 166;
+const GRID_H = 76;
+const GRID_GAP = 8;
 const cardRect = (i) => {
+  if (grid()) {
+    const x0 = (W - (GRID_W * 2 + GRID_GAP)) / 2;
+    return { x: x0 + (i % 2) * (GRID_W + GRID_GAP), y: 56 + Math.floor(i / 2) * (GRID_H + GRID_GAP), w: GRID_W, h: GRID_H };
+  }
   const x0 = (W - (CARD_W * 3 + CARD_GAP * 2)) / 2;
   return { x: x0 + i * (CARD_W + CARD_GAP), y: CARD_Y, w: CARD_W, h: CARD_H };
 };
@@ -443,14 +481,15 @@ const cardRect = (i) => {
 function drawMenu(dt) {
   backdrop(dt);
   const n = ARCADE.games.length;
-  if (input.hit('left')) {
-    sel = (sel + n - 1) % n;
+  const cols = grid() ? 2 : n;
+  const move = (k) => {
+    sel = (sel + k + n) % n;
     sound('move');
-  }
-  if (input.hit('right')) {
-    sel = (sel + 1) % n;
-    sound('move');
-  }
+  };
+  if (input.hit('left')) move(-1);
+  if (input.hit('right')) move(1);
+  if (cols < n && input.hit('up')) move(-cols);
+  if (cols < n && input.hit('down')) move(cols);
   if (input.hit('enter', 'space')) {
     sound('select');
     return openIntro(sel);
@@ -459,36 +498,53 @@ function drawMenu(dt) {
 
   // 标题：小章鱼挥手
   const wave = Math.floor(t * 4) % 2;
-  g.pet(W / 2 - g.measure(tr('arc.title'), { size: 17, weight: 800 }) / 2 - 22, 36, 1.6, { eyes: 'happy', armR: wave ? 'high' : 1, blush: true, t });
-  g.text(tr('arc.title'), W / 2, 24, { size: 17, weight: 800, color: C.cream, align: 'center' });
-  g.text(tr('arc.subtitle'), W / 2, 44, { size: 7.5, color: C.dim, align: 'center' });
+  const top = grid() ? -4 : 0;
+  g.pet(W / 2 - g.measure(tr('arc.title'), { size: 17, weight: 800 }) / 2 - 22, 36 + top, 1.6, { eyes: 'happy', armR: wave ? 'high' : 1, blush: true, t });
+  g.text(tr('arc.title'), W / 2, 24 + top, { size: 17, weight: 800, color: C.cream, align: 'center' });
+  g.text(tr('arc.subtitle'), W / 2, 44 + top, { size: 7.5, color: C.dim, align: 'center' });
 
   ARCADE.games.forEach((game, i) => {
     const r = cardRect(i);
     if (g.hover(r) && sel !== i) sel = i;
     const on = sel === i;
-    const lift = on ? -3 : 0;
-    const y = r.y + lift;
+    const y = r.y + (on ? -2 : 0);
     if (on) g.round(r.x - 2, y - 2, r.w + 4, r.h + 4, 9, null, C.accent, 2);
     g.round(r.x, y, r.w, r.h, 7, C.card, null);
-    // 小画面
-    const ir = { x: r.x + 6, y: y + 6, w: r.w - 12, h: 66 };
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(px(ir.x), py(ir.y), ir.w * s, ir.h * s, 4 * s);
-    ctx.clip();
-    game.icon(g, ir.x, ir.y, ir.w, ir.h, t);
-    ctx.restore();
-    g.text(tr(`${game.id}.name`), r.x + r.w / 2, y + 84, { size: 9, weight: 800, align: 'center' });
-    g.wrapBalanced(tr(`${game.id}.tagline`), r.w - 12, { size: 6.5 }, 3).forEach((line, k) => g.text(line, r.x + r.w / 2, y + 97 + k * 9, { size: 6.5, color: C.muted, align: 'center' }));
     const best = bestOf(game.id);
-    g.text(best ? tr('arc.best', { n: best }) : tr('arc.noBest'), r.x + r.w / 2, y + r.h - 9, { size: 7, weight: 700, color: best ? C.accent : C.muted, align: 'center' });
+    const bestText = best ? tr('arc.best', { n: best }) : tr('arc.noBest');
+    const bestStyle = { size: 7, weight: 700, color: best ? C.accent : C.muted };
+    if (grid()) {
+      // 横着：左边小画面，右边名字、简介、最高分
+      const ir = { x: r.x + 5, y: y + 5, w: 80, h: r.h - 10 };
+      clipIcon(game, ir, 4);
+      const tx = ir.x + ir.w + 7;
+      const tw = r.x + r.w - 6 - tx;
+      g.text(tr(`${game.id}.name`), tx, y + 14, { size: 8.5, weight: 800 });
+      g.wrapBalanced(tr(`${game.id}.tagline`), tw, { size: 6.2 }, 3).forEach((line, k) => g.text(line, tx, y + 27 + k * 8.5, { size: 6.2, color: C.muted }));
+      g.text(bestText, tx, y + r.h - 10, bestStyle);
+    } else {
+      const ir = { x: r.x + 6, y: y + 6, w: r.w - 12, h: 66 };
+      clipIcon(game, ir, 4);
+      g.text(tr(`${game.id}.name`), r.x + r.w / 2, y + 84, { size: 9, weight: 800, align: 'center' });
+      g.wrapBalanced(tr(`${game.id}.tagline`), r.w - 12, { size: 6.5 }, 3).forEach((line, k) => g.text(line, r.x + r.w / 2, y + 97 + k * 9, { size: 6.5, color: C.muted, align: 'center' }));
+      g.text(bestText, r.x + r.w / 2, y + r.h - 9, { ...bestStyle, align: 'center' });
+    }
     if (input.takeClick({ ...r, y })) {
       sound('select');
       openIntro(i);
     }
   });
-  g.text(tr('arc.menuHint'), W / 2, H - 14, { size: 6.5, color: C.dim, align: 'center' });
+  g.text(tr(grid() ? 'arc.menuHintGrid' : 'arc.menuHint'), W / 2, H - 12, { size: 6.5, color: C.dim, align: 'center' });
+}
+
+// 游戏的小画面画在圆角框里，超出的部分裁掉
+function clipIcon(game, r, radius) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(px(r.x), py(r.y), r.w * s, r.h * s, radius * s);
+  ctx.clip();
+  game.icon(g, r.x, r.y, r.w, r.h, t);
+  ctx.restore();
 }
 
 // ---------- 规则 ----------
@@ -499,12 +555,7 @@ function drawIntro(dt) {
   const p = { x: 22, y: 14, w: W - 44, h: H - 28 };
   g.round(p.x, p.y, p.w, p.h, 9, C.card, null);
   const ir = { x: p.x + 12, y: p.y + 12, w: 116, h: 76 };
-  ctx.save();
-  ctx.beginPath();
-  ctx.roundRect(px(ir.x), py(ir.y), ir.w * s, ir.h * s, 5 * s);
-  ctx.clip();
-  def.icon(g, ir.x, ir.y, ir.w, ir.h, t);
-  ctx.restore();
+  clipIcon(def, ir, 5);
   const tx = ir.x + ir.w + 12;
   const tw = p.x + p.w - 12 - tx;
   g.text(tr(`${def.id}.name`), tx, p.y + 22, { size: 14, weight: 800 });
@@ -513,17 +564,27 @@ function drawIntro(dt) {
   const best = bestOf(def.id);
   g.text(best ? tr('arc.best', { n: best }) : tr('arc.noBest'), tx, p.y + 80, { size: 8, weight: 700, color: best ? C.accent : C.muted });
 
-  let y = ir.y + ir.h + 14;
-  for (const key of ['rule1', 'rule2', 'rule3']) {
-    const lines = g.wrap(tr(`${def.id}.${key}`), p.w - 34, { size: 7.5 }, 2);
-    g.rect(p.x + 14, y - 1.5, 3, 3, C.accent);
-    lines.forEach((line, k) => g.text(line, p.x + 22, y + k * 10, { size: 7.5 }));
-    y += lines.length * 10 + 4;
-  }
-  const keys = g.wrap(`${tr('arc.controls')}${tr('punct.colon')}${tr(`${def.id}.keys`)}`, p.w - 28, { size: 7 }, 2);
-  keys.forEach((line, k) => g.text(line, p.x + 14, y + 2 + k * 9, { size: 7, color: C.muted }));
-
+  // 规则和操作说明：按内容挑字号，长的（比如日文、塔防）缩小一档，不能压到下面的按钮
   const by = p.y + p.h - 38;
+  const top = ir.y + ir.h + 14;
+  const keysText = `${tr('arc.controls')}${tr('punct.colon')}${tr(`${def.id}.keys`)}`;
+  let layout = null;
+  for (const size of [7.5, 7, 6.5, 6, 5.5]) {
+    const lh = size * 1.33;
+    const rules = ['rule1', 'rule2', 'rule3'].map((key) => g.wrap(tr(`${def.id}.${key}`), p.w - 34, { size }, 3));
+    const keys = g.wrap(keysText, p.w - 28, { size: size - 0.5 }, 3);
+    const height = rules.reduce((h, lines) => h + lines.length * lh + 4, 0) + keys.length * (lh - 1) + 2;
+    layout = { size, lh, rules, keys };
+    if (top + height <= by - 4) break;
+  }
+  let y = top;
+  for (const lines of layout.rules) {
+    g.rect(p.x + 14, y - 1.5, 3, 3, C.accent);
+    lines.forEach((line, k) => g.text(line, p.x + 22, y + k * layout.lh, { size: layout.size }));
+    y += lines.length * layout.lh + 4;
+  }
+  layout.keys.forEach((line, k) => g.text(line, p.x + 14, y + 2 + k * (layout.lh - 1), { size: layout.size - 0.5, color: C.muted }));
+
   if (g.button({ x: p.x + p.w / 2 + 6, y: by, w: 92, h: 20 }, tr('arc.start'), { primary: true })) return startRun();
   if (g.button({ x: p.x + p.w / 2 - 98, y: by, w: 92, h: 20 }, tr('arc.back'))) return toMenu();
   g.text(tr('arc.introHint'), W / 2, p.y + p.h - 9, { size: 6, color: C.muted, align: 'center' });
@@ -537,6 +598,12 @@ function drawHud() {
   const sw = g.measure(String(h.score), { size: 10, weight: 800 });
   g.text(tr('arc.best', { n: Math.max(bestOf(def.id), h.score) }), 14 + sw, 9.5, { size: 6.5, color: C.dim });
   if (h.label) g.text(h.label, W / 2, 9, { size: 7.5, weight: 700, color: h.labelColor || C.cream, align: 'center' });
+  // 血量多（比如塔防的 20 点）：一颗心加数字
+  if (h.hp != null) {
+    const low = h.hp <= Math.max(3, (h.hpMax || 20) * 0.25);
+    g.glyph('heart', W - 52, 9, 1.4, low ? '#FF5C5C' : '#F25F7A', '#FFFFFF');
+    g.text(`${h.hp}`, W - 45, 9, { size: 8.5, weight: 800, color: low ? '#FF8A8A' : C.cream });
+  }
   // 生命：至少画三个格子，丢了的是空心的
   const slots = h.lives == null ? 0 : Math.max(3, h.lives);
   for (let i = 0; i < slots; i++) {
@@ -640,6 +707,7 @@ function frame(now) {
 
 function drawGame(dt) {
   if (state === 'play') {
+    if (input.hits.has('esc') && run.handleEsc && run.handleEsc()) input.hits.delete('esc');
     if (input.hit('esc', 'pause')) state = 'pause';
     else {
       run.update(dt, input);

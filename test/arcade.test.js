@@ -78,10 +78,13 @@ test('发牌：一副发完之前不重复，两种大约一半一半', () => {
   assert.equal(new Set(okFirst).size, okFirst.length); // 同一副里没有重复
 });
 
-test('三个游戏用到的文案四种语言都有', () => {
+test('每个游戏用到的文案四种语言都有', () => {
   const keys = ['menu.arcade', 'set.arcade'];
   for (const g of GAMES) for (const k of ['name', 'tagline', 'rule1', 'rule2', 'rule3', 'keys']) keys.push(`${g}.${k}`);
   for (const why of WHY) keys.push(`approve.why.${why}`);
+  // 塔防里按名字拼出来的：四种塔的名字和说明、四种 Bug 的名字
+  for (const tower of ['test', 'lint', 'review', 'types']) keys.push(`defense.tower.${tower}`, `defense.tip.${tower}`);
+  for (const enemy of ['bug', 'race', 'leak', 'legacy']) keys.push(`defense.enemy.${enemy}`);
   for (const lang of Object.keys(I18N.STRINGS)) {
     const missing = keys.filter((k) => !(k in I18N.STRINGS[lang]));
     assert.deepEqual(missing, [], lang);

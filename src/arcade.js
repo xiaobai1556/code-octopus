@@ -2,7 +2,7 @@
 const fs = require('fs');
 const { writeJsonAtomic } = require('./jsonfile');
 
-const GAMES = ['bugs', 'hop', 'approve'];
+const GAMES = ['bugs', 'hop', 'approve', 'defense'];
 const MAX_SCORE = 10_000_000;
 
 class ArcadeScores {
