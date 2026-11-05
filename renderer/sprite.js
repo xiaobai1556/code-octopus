@@ -132,6 +132,12 @@ function drawHead(px, blob, item, top, grow, t) {
       px(7, r(2), 2, 1, '#FFE08A');
       px(3, r(1), 11, 1, '#D9A22E'); // 帽檐，前面长一点
       break;
+    case 'visor':
+      // 敲代码的成就：老式程序员戴的绿色遮光帽，帽檐半透明
+      px(4, r(2), 8, 1, '#3E8A4C');
+      px(3, r(1), 10, 1, '#2F6B3A'); // 帽带
+      px(11, r(1), 5, 1, 'rgba(110,205,130,0.8)'); // 往前伸的半透明帽檐
+      break;
     case 'partyhat':
       px(5, r(1), 6, 1, '#F25F8A');
       px(6, r(2), 4, 1, '#FFD43B');

@@ -2,7 +2,7 @@
 const fs = require('fs');
 const { writeJsonAtomic } = require('./jsonfile');
 
-const GAMES = ['bugs', 'hop', 'approve', 'defense'];
+const GAMES = ['bugs', 'hop', 'approve', 'defense', 'typing'];
 const MAX_SCORE = 10_000_000;
 const KEEP_DAYS = 14; // 今日挑战的成绩只留最近两周
 

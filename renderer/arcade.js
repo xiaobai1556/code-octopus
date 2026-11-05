@@ -276,6 +276,8 @@ const input = {
   held: new Set(), // 按着的
   hits: new Set(), // 这一帧刚按下的
   clicks: [], // 这一帧的点击（逻辑坐标）
+  typed: [], // 这一帧打出来的字（打字游戏用）
+  imeAt: -1e9, // 上次看到输入法在拦按键的时间
   pointer: null,
   pointerAt: 0, // 鼠标最后一次动的时间
   down(a) {
@@ -314,6 +316,18 @@ const input = {
 };
 
 window.addEventListener('keydown', (e) => {
+  // 打字游戏进行中：能打出字的键都当打字（字母、数字、符号、空格），P / Q 这些快捷键不管用，只有 Esc 暂停
+  if (state === 'play' && run && run.textInput) {
+    if (e.key === 'Process' || e.isComposing) {
+      input.imeAt = performance.now(); // 中文 / 日文输入法在拦按键：游戏里提示切到英文
+      return;
+    }
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      input.typed.push(e.key);
+      return;
+    }
+  }
   const a = KEYMAP[e.code];
   if (!a) return;
   e.preventDefault();
@@ -419,7 +433,15 @@ const shortDay = (key) => key.slice(5).replace('-', '/').replace(/^0/, '').repla
 // 游戏里决定玩法的随机（掉什么、窗口怎么摆、出什么题、每波来什么）都用它，特效用 Math.random
 ARCADE.env = ({ seed = '', sound: snd = () => {}, best = 0 } = {}) => {
   const rng = seed ? ARCADE_RNG.seeded(seed) : Math.random;
-  return { sound: snd, best, rng, rand: (a, b) => a + rng() * (b - a), pick: (list) => list[Math.floor(rng() * list.length)], daily: !!seed };
+  return {
+    sound: snd,
+    best,
+    rng,
+    rand: (a, b) => a + rng() * (b - a),
+    pick: (list) => list[Math.floor(rng() * list.length)],
+    daily: !!seed,
+    imeWarning: () => performance.now() - input.imeAt < 3000, // 最近 3 秒输入法拦过按键
+  };
 };
 const achOf = (id) => achievements.find((a) => a.game === id) || null;
 
@@ -500,10 +522,22 @@ const CARD_H = 140;
 const CARD_GAP = 10;
 const CARD_Y = 62;
 const grid = () => ARCADE.games.length > 3;
+const compact = () => ARCADE.games.length > 4;
 const GRID_W = 166;
 const GRID_H = 76;
 const GRID_GAP = 8;
+const MINI_W = 110;
+const MINI_H = 80;
+const cols = () => (compact() ? 3 : grid() ? 2 : ARCADE.games.length);
 const cardRect = (i) => {
+  if (compact()) {
+    // 三列，最后一行不满就居中
+    const n = ARCADE.games.length;
+    const row = Math.floor(i / 3);
+    const inRow = Math.min(3, n - row * 3);
+    const x0 = (W - (MINI_W * inRow + GRID_GAP * (inRow - 1))) / 2;
+    return { x: x0 + (i % 3) * (MINI_W + GRID_GAP), y: 54 + row * (MINI_H + GRID_GAP), w: MINI_W, h: MINI_H };
+  }
   if (grid()) {
     const x0 = (W - (GRID_W * 2 + GRID_GAP)) / 2;
     return { x: x0 + (i % 2) * (GRID_W + GRID_GAP), y: 56 + Math.floor(i / 2) * (GRID_H + GRID_GAP), w: GRID_W, h: GRID_H };
@@ -515,15 +549,22 @@ const cardRect = (i) => {
 function drawMenu(dt) {
   backdrop(dt);
   const n = ARCADE.games.length;
-  const cols = grid() ? 2 : n;
+  const c = cols();
   const move = (k) => {
     sel = (sel + k + n) % n;
     sound('move');
   };
+  // 上下：换一行（最后一行不满时停在最后一个）
+  const moveRow = (k) => {
+    const next = clamp(sel + k, 0, n - 1);
+    if (next === sel) return;
+    sel = next;
+    sound('move');
+  };
   if (input.hit('left')) move(-1);
   if (input.hit('right')) move(1);
-  if (cols < n && input.hit('up')) move(-cols);
-  if (cols < n && input.hit('down')) move(cols);
+  if (c < n && input.hit('up')) moveRow(-c);
+  if (c < n && input.hit('down')) moveRow(c);
   if (input.hit('enter', 'space')) {
     sound('select');
     return openIntro(sel);
@@ -547,7 +588,12 @@ function drawMenu(dt) {
     const best = bestOf(game.id);
     const bestText = best ? tr('arc.best', { n: best }) : tr('arc.noBest');
     const bestStyle = { size: 7, weight: 700, color: best ? C.accent : C.muted };
-    if (grid()) {
+    if (compact()) {
+      const ir = { x: r.x + 5, y: y + 5, w: r.w - 10, h: 44 };
+      clipIcon(game, ir, 4);
+      g.text(tr(`${game.id}.name`), r.x + r.w / 2, y + 59, { size: 8, weight: 800, align: 'center' });
+      g.text(bestText, r.x + r.w / 2, y + r.h - 9, { ...bestStyle, size: 6.5, align: 'center' });
+    } else if (grid()) {
       // 横着：左边小画面，右边名字、简介、最高分
       const ir = { x: r.x + 5, y: y + 5, w: 80, h: r.h - 10 };
       clipIcon(game, ir, 4);
@@ -757,6 +803,7 @@ function frame(now) {
   }
   canvas.style.cursor = hovering ? 'pointer' : 'default';
   input.hits.clear();
+  input.typed.length = 0;
   input.clicks.length = 0;
   requestAnimationFrame(frame);
 }

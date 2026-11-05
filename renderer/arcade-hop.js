@@ -336,7 +336,8 @@
       const toY = y + 0.32 * h;
       const flip = Math.floor(t * 1.1) % 2;
       const [ax, bx, ay, by] = flip ? [px1, px0, toY, fromY] : [px0, px1, fromY, toY];
-      g.pet(ax + (bx - ax) * k, ay + (by - ay) * k - arc * 22, 1.2, { legs: arc > 0.2 ? 'tuck' : 'stand', armL: 'high', armR: 'high', eyes: 'happy', t }, bx < ax);
+      const small = h < 60; // 五个游戏时菜单卡片的画面很矮，章鱼小一点、跳得低一点，免得头被裁掉
+      g.pet(ax + (bx - ax) * k, ay + (by - ay) * k - arc * (small ? 6 : 22), small ? 0.8 : 1.2, { legs: arc > 0.2 ? 'tuck' : 'stand', armL: 'high', armR: 'high', eyes: 'happy', t }, bx < ax);
     },
     create: (env) => new Hop(env),
   });
