@@ -638,6 +638,7 @@ const world = {
   },
   // 拖图标：在小章鱼身后冒出一个假的桌面图标
   spawnIcon(pet) {
+    this.releaseIcon(pet); // 手里已经拖着一个：先放下
     const names = tr('haul.items').split('|');
     const label = pick(names);
     const ext = (label.match(/\.(\w+)$/) || [])[1] || '';
@@ -1128,8 +1129,13 @@ const ICON_STAY_MS = 7000;
 const ICON_FADE_MS = 1000;
 function updateIcons(now) {
   for (const icon of world.fakeIcons) {
-    // 被叫去干活、被拖起来、被转到别的屏：松手
-    if (icon.holder && (!world.pets.includes(icon.holder) || !['haul', 'haulStart'].includes(icon.holder.mode))) world.releaseIcon(icon.holder);
+    // 被叫去干活、被拖起来、被转到别的屏，或者它手里换成了别的图标：松手
+    const pet = icon.holder;
+    if (pet && (!world.pets.includes(pet) || !['haul', 'haulStart'].includes(pet.mode) || pet.haulIcon !== icon)) {
+      if (pet.haulIcon === icon) pet.haulIcon = null;
+      icon.holder = null;
+      icon.leftAt = now;
+    }
     if (icon.holder) world.followIcon(icon);
   }
   world.fakeIcons = world.fakeIcons.filter((icon) => icon.holder || now - icon.leftAt < ICON_STAY_MS + ICON_FADE_MS);
