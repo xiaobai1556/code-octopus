@@ -111,7 +111,7 @@ class Stats {
     for (let i = n - 1; i >= 0; i--) {
       const key = dayKey(new Date(y, m - 1, d - i));
       const day = this.data.days[key];
-      out.push({ date: key, busyMs: day ? day.busyMs : 0, tools: day ? day.toolCount : 0, costUSD: day ? day.costUSD || 0 : 0 });
+      out.push({ date: key, busyMs: day ? day.busyMs : 0, tools: day ? day.toolCount : 0, costUSD: day ? day.costUSD || 0 : 0, commits: day ? day.commits || 0 : 0, testsPass: day ? day.tests.pass : 0 });
     }
     return out;
   }

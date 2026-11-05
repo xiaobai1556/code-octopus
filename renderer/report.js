@@ -205,7 +205,46 @@ const shortDate = (key) => {
 };
 const tickDate = (key) => key.slice(5).replace('-', '/').replace(/^0/, '').replace('/0', '/');
 
+// 这周（周一到看的这天）和上周同样几天比：忙碌时长、工具调用、提交、测试通过
+const WEEK = [
+  ['busyMs', 'rep.busy', (v) => fmtDuration(v)],
+  ['tools', 'rep.tools', (v) => String(v)],
+  ['commits', 'rep.commits', (v) => String(v)],
+  ['testsPass', 'rep.testsPassed', (v) => String(v)],
+];
+
+function deltaText(now, before) {
+  if (!now && !before) return '';
+  if (!before) return tr('rep.deltaNew');
+  const p = Math.round(((now - before) / before) * 100);
+  if (Math.abs(p) < 5) return tr('rep.deltaSame');
+  return p > 0 ? tr('rep.deltaUp', { p }) : tr('rep.deltaDown', { p: -p });
+}
+
+function renderWeek() {
+  const days = data.trend || [];
+  const n = days.length;
+  const end = n ? new Date(`${days[n - 1].date}T12:00:00`) : null;
+  const wd = end ? (end.getDay() + 6) % 7 : 0; // 周一是 0
+  $('week').hidden = n < wd + 8;
+  if ($('week').hidden) return;
+  const cur = days.slice(n - 1 - wd);
+  const prev = days.slice(n - 8 - wd, n - 7);
+  const sum = (list, k) => list.reduce((a, d) => a + (d[k] || 0), 0);
+  $('week-title').textContent = tr('rep.week');
+  $('week-range').textContent = tr('rep.weekRange', { from: shortDate(cur[0].date), to: shortDate(cur[cur.length - 1].date) });
+  $('week-stats').replaceChildren(
+    ...WEEK.map(([key, label, fmt]) => {
+      const now = sum(cur, key);
+      const box = stat(now ? fmt(now) : '—', tr(label));
+      box.append(el('div', 'delta', deltaText(now, sum(prev, key))));
+      return box;
+    })
+  );
+}
+
 function renderTrend() {
+  renderWeek();
   const days = data.trend || [];
   const m = TREND[trendMetric];
   $('trend-title').textContent = tr('rep.trend');
@@ -317,7 +356,7 @@ function mockTrend(end) {
     const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
     const off = day.getDay() === 0 || day.getDay() === 6 ? 0.25 : 1;
     const busy = Math.max(0, Math.round((Math.sin(i * 1.7) * 0.5 + 0.7) * off * 4 * 3600e3 * (i % 9 === 4 ? 0 : 1)));
-    return { date: key, busyMs: busy, tools: Math.round(busy / 3600e3 * 140), costUSD: +(busy / 3600e3 * 3.1).toFixed(2) };
+    return { date: key, busyMs: busy, tools: Math.round(busy / 3600e3 * 140), costUSD: +(busy / 3600e3 * 3.1).toFixed(2), commits: Math.round(busy / 3600e3 * 1.5), testsPass: Math.round(busy / 3600e3 * 4) };
   });
 }
 

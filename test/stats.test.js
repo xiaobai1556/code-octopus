@@ -100,6 +100,7 @@ test('最近 N 天：老的在前，没干活的日子补 0，跨月也对', (t)
   const r = s.range('2026-11-02', 5);
   assert.deepEqual(r.map((d) => d.date), ['2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
   assert.deepEqual(r.map((d) => d.tools), [0, 0, 1, 0, 1]);
+  assert.deepEqual(r[4], { date: '2026-11-02', busyMs: 0, tools: 1, costUSD: 0, commits: 0, testsPass: 0 });
   assert.equal(s.range('2026-11-02').length, 30);
 });
 

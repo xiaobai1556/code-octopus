@@ -79,6 +79,14 @@
 
     <!-- 最近 30 天的趋势：放在日报卡片外面，复制 / 保存的图片还是那张日报 -->
     <section id="trend">
+      <!-- 这周（周一到看的这天）和上周同期比 -->
+      <div id="week" hidden>
+        <div class="week-head">
+          <h2 id="week-title"></h2>
+          <small id="week-range"></small>
+        </div>
+        <div class="trend-stats" id="week-stats"></div>
+      </div>
       <div class="trend-head">
         <h2 id="trend-title"></h2>
         <div class="seg" id="trend-metric" role="group"></div>

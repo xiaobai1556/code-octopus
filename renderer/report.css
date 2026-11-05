@@ -371,6 +371,31 @@ select:focus-visible {
   background: var(--accent);
   color: #fff;
 }
+.week-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.week-head h2 {
+  margin: 0;
+}
+.week-head small {
+  color: var(--muted);
+  font-size: 11px;
+}
+#week {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--line);
+}
+.delta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
 .trend-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
