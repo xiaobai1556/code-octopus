@@ -21,6 +21,7 @@ const { trayIcon } = require('./src/icon');
 const { writeJsonAtomic } = require('./src/jsonfile');
 const { ArcadeScores } = require('./src/arcade');
 const notify = require('./src/notify');
+const { inQuietHours } = require('./src/quiet');
 
 const tr = I18N.t;
 const PORT = Number(process.env.CLAUDE_PET_PORT) || 23333;
@@ -45,11 +46,13 @@ let tray = null;
 // contextWindow：算"饱腹度"用的上下文窗口大小，auto 或 200000 / 1000000；sound：提示音；
 // lastReportDay：哪天已经提醒过看日报；outfit：穿戴的装扮；holidays：节日自动换装；
 // feed：拖文件喂它；feedDir：章鱼的肚子在哪；feedHint：下载文件夹太乱时提醒；onboarded：看过新手引导；
-// approveOnPet：在桌宠身上直接批准权限请求；dance：放歌时跳舞；timeOfDay：跟着时间变化；pomodoroMin：番茄钟多少分钟
+// approveOnPet：在桌宠身上直接批准权限请求；dance：放歌时跳舞；timeOfDay：跟着时间变化；pomodoroMin：番茄钟多少分钟；
+// quietHours / quietFrom / quietTo：免打扰时段（几点到几点只提醒要你做决定的事、不响提示音）
 let config = {
   scale: 5, bubbles: 'full', collide: true, color: 0, lang: 'auto', contextWindow: 'auto', sound: true, lastReportDay: '',
   outfit: { head: '', face: '', neck: '' }, holidays: true, feed: true, feedDir: '', feedHint: true, lastHungryDay: '', onboarded: false, autoUpdate: true,
   approveOnPet: false, dance: true, timeOfDay: true, pomodoroMin: 25, notifyFullscreen: true, hotkeys: false,
+  quietHours: false, quietFrom: 22, quietTo: 8,
 };
 const POMODORO_MINUTES = [15, 25, 45];
 const BUBBLE_MODES = ['alerts', 'brief', 'full'];
@@ -98,10 +101,28 @@ function saveConfig() {
 const systemLocale = () => I18N.detect(app.getPreferredSystemLanguages());
 const locale = () => (config.lang !== 'auto' && I18N.NAMES[config.lang] ? config.lang : systemLocale());
 
+// 现在是不是免打扰时段
+const quietNow = () => !!config.quietHours && inQuietHours(config.quietFrom, config.quietTo);
+
+// 发给覆盖层的设置：免打扰时段里气泡只提醒、不响提示音（不改你自己的设置，时段一过就恢复）
+function overlayConfig() {
+  const quiet = quietNow();
+  return { ...config, locale: locale(), bubbles: quiet ? 'alerts' : config.bubbles, sound: quiet ? false : config.sound, quietNow: quiet };
+}
+
 function applyConfig() {
   I18N.setLang(locale());
   if (tray) tray.setToolTip(tr('app.name'));
-  broadcast('config', { ...config, locale: locale() });
+  broadcast('config', overlayConfig());
+}
+
+// 每半分钟看一眼：进出免打扰时段时重新发一次设置
+let wasQuiet = false;
+function checkQuietHours() {
+  const q = quietNow();
+  if (q === wasQuiet) return;
+  wasQuiet = q;
+  applyConfig();
 }
 
 function setConfig(patch) {
@@ -716,7 +737,7 @@ function fullscreenToast(ev, info, target) {
   recentToasts.push({ at: new Date().toISOString(), kind: hit.kind, sessionId: ev.sessionId, ...text, shown });
   if (recentToasts.length > 10) recentToasts.shift();
   if (!shown) return;
-  const n = new Notification({ title: text.title, body: text.body, icon: trayIcon(), silent: config.sound === false });
+  const n = new Notification({ title: text.title, body: text.body, icon: trayIcon(), silent: config.sound === false || quietNow() });
   liveToasts.add(n);
   const forget = () => liveToasts.delete(n);
   n.on('click', () => {
@@ -1067,7 +1088,7 @@ function startServer() {
           const state = {
             screens, pets, petDragging, dragOverlay: dragOverlay && dragOverlay.id, externalDrag, lastPressAt, buttons, captureLog, userDragging, drags, duplicatesDropped, userAway, locale: locale(),
             sessions: [...sessions].map(([id, s]) => ({ id, hwnd: s.hwnd, exe: s.exe, used: s.used, limit: contextLimit(s), costUSD: s.costUSD, screen: sessionOverlay.get(id) })),
-            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents, errors: recentErrors, toasts: recentToasts, hotkeys: hotkeyStatus,
+            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents, errors: recentErrors, toasts: recentToasts, hotkeys: hotkeyStatus, quietNow: quietNow(),
           };
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(state));
@@ -1236,6 +1257,7 @@ function buildMenu(pet, o) {
       click: () => setConfig({ scale }),
     })),
   });
+  if (quietNow()) items.push({ label: tr('menu.quietHoursNow', { h: config.quietTo }), enabled: false });
   items.push({ label: tr('menu.quiet'), type: 'checkbox', checked: config.bubbles === 'alerts', click: (mi) => setConfig({ bubbles: mi.checked ? 'alerts' : 'full' }) });
   items.push({ label: tr('menu.summon'), click: summon });
   items.push({ label: tr('menu.demo'), click: () => sendTo(cursorOverlay(), 'demo') });
@@ -1333,6 +1355,7 @@ function registerSettingsIpc() {
       lastBite: bite ? bite.files.length : 0,
       update: updater.status(),
       hotkeys: hotkeyStatus,
+      quietNow: quietNow(),
     };
   });
 
@@ -1344,7 +1367,8 @@ function registerSettingsIpc() {
     if (Number.isInteger(patch.color) && patch.color >= 0 && patch.color < 6) clean.color = patch.color;
     if (patch.lang === 'auto' || I18N.NAMES[patch.lang]) clean.lang = patch.lang;
     if (CONTEXT_WINDOWS.includes(patch.contextWindow)) clean.contextWindow = patch.contextWindow;
-    for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay', 'notifyFullscreen', 'hotkeys']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
+    for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay', 'notifyFullscreen', 'hotkeys', 'quietHours']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
+    for (const key of ['quietFrom', 'quietTo']) if (Number.isInteger(patch[key]) && patch[key] >= 0 && patch[key] < 24) clean[key] = patch[key];
     if (POMODORO_MINUTES.includes(patch.pomodoroMin)) clean.pomodoroMin = patch.pomodoroMin;
     const outfit = cleanOutfit(patch.outfit);
     if (outfit) clean.outfit = outfit;
@@ -1461,7 +1485,7 @@ function registerReportIpc() {
 function checkReportTime() {
   const now = new Date();
   const today = dayKey(now);
-  if (config.lastReportDay === today || now.getHours() * 60 + now.getMinutes() < REPORT_AT_MINUTES) return;
+  if (config.lastReportDay === today || now.getHours() * 60 + now.getMinutes() < REPORT_AT_MINUTES || quietNow()) return;
   const d = stats && stats.get(today);
   if (!d || (!d.prompts && !d.toolCount)) return;
   setConfig({ lastReportDay: today });
@@ -1573,7 +1597,7 @@ function registerOverlayIpc() {
     o.platforms = '';
     o.cursorKey = '';
     sendLayout(o);
-    sendTo(o, 'config', { ...config, locale: locale() });
+    sendTo(o, 'config', overlayConfig());
     sendTo(o, 'notes', notes);
     sendTo(o, 'pomodoro', pomodoroState());
     sendTo(o, 'music', { playing: music.playing });
@@ -1625,6 +1649,8 @@ if (!app.requestSingleInstanceLock()) {
     mouseLoop();
     setInterval(checkUserIdle, 5000);
     setInterval(checkReportTime, 60 * 1000);
+    wasQuiet = quietNow();
+    setInterval(checkQuietHours, 30 * 1000);
     setInterval(ensurePet, 500);
     setInterval(keepOnTop, 1000);
     setTimeout(checkHunger, 10 * 60 * 1000);

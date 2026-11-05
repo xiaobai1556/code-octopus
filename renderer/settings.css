@@ -259,6 +259,22 @@ select {
   background: var(--card);
   min-width: 160px;
 }
+/* 免打扰时段：两个选小时的下拉框 */
+.quiet-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.quiet-range[hidden] {
+  display: none;
+}
+select.hour {
+  min-width: 0;
+  padding: 2px 6px;
+}
 
 /* ---------- 小章鱼列表 ---------- */
 .pets {
@@ -351,6 +367,9 @@ select {
   width: 7px;
   height: 7px;
   background: var(--line);
+}
+.status[hidden] {
+  display: none; /* display: flex 会盖掉浏览器默认的 [hidden] */
 }
 .status.ok {
   color: var(--ok);

@@ -90,6 +90,19 @@
         </div>
         <div class="row">
           <div>
+            <span class="label" data-t="set.quietHours"></span>
+            <small data-t="set.quietHoursHint"></small>
+            <div class="quiet-range" id="quiet-range">
+              <select id="quiet-from" class="hour"></select>
+              <span data-t="set.quietTo"></span>
+              <select id="quiet-to" class="hour"></select>
+            </div>
+            <div class="status ok" id="quiet-now" hidden></div>
+          </div>
+          <button class="switch" id="quiet-hours" role="switch"></button>
+        </div>
+        <div class="row">
+          <div>
             <span class="label" data-t="set.hotkeys"></span>
             <small data-t="set.hotkeysHint"></small>
             <div class="status" id="hotkeys-status" hidden></div>

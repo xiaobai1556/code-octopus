@@ -335,6 +335,17 @@ function renderPlay() {
   $('dance').setAttribute('aria-checked', String(config.dance !== false));
   $('time-of-day').setAttribute('aria-checked', String(config.timeOfDay !== false));
   $('hotkeys').setAttribute('aria-checked', String(!!config.hotkeys));
+  // 免打扰时段：打开了才显示几点到几点
+  $('quiet-hours').setAttribute('aria-checked', String(!!config.quietHours));
+  $('quiet-range').hidden = !config.quietHours;
+  for (const [id, key, def] of [['quiet-from', 'quietFrom', 22], ['quiet-to', 'quietTo', 8]]) {
+    const sel = $(id);
+    if (document.activeElement === sel) continue;
+    if (!sel.options.length) sel.append(...Array.from({ length: 24 }, (_, h) => new Option(`${h}:00`, String(h))));
+    sel.value = String(config[key] ?? def);
+  }
+  $('quiet-now').hidden = !state.quietNow;
+  $('quiet-now').textContent = tr('set.quietNow');
   // 打开了但有的快捷键被别的程序占了：说是哪个
   const taken = Object.entries(state.hotkeys || {}).filter(([, ok]) => !ok).map(([name]) => ({ summon: 'Ctrl+Alt+O', arcade: 'Ctrl+Alt+G' })[name]);
   const st = $('hotkeys-status');
@@ -493,7 +504,7 @@ function render() {
   if (changed('wardrobe', [state.config.outfit, state.config.holidays, state.config.color, state.holiday, state.achievements])) renderWardrobe();
   if (changed('achievements', [state.achievements, state.config.color])) renderAchievements();
   if (changed('feed', [state.config.feed, state.config.feedHint, state.config.feedDir, state.lastBite])) renderFeed();
-  if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin, state.config.hotkeys, state.hotkeys])) renderPlay();
+  if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin, state.config.hotkeys, state.hotkeys, state.config.quietHours, state.config.quietFrom, state.config.quietTo, state.quietNow])) renderPlay();
   if (changed('updates', [state.update, state.config.autoUpdate])) renderUpdates();
   if (changed('pets', state.pets)) renderPets();
   if (changed('events', state.events)) renderEvents();
@@ -525,6 +536,15 @@ $('approve').onclick = () => update({ approveOnPet: !state.config.approveOnPet }
 $('dance').onclick = () => update({ dance: state.config.dance === false });
 $('time-of-day').onclick = () => update({ timeOfDay: state.config.timeOfDay === false });
 $('hotkeys').onclick = () => update({ hotkeys: !state.config.hotkeys });
+$('quiet-hours').onclick = () => update({ quietHours: !state.config.quietHours });
+$('quiet-from').onchange = (e) => {
+  e.target.blur();
+  update({ quietFrom: Number(e.target.value) });
+};
+$('quiet-to').onchange = (e) => {
+  e.target.blur();
+  update({ quietTo: Number(e.target.value) });
+};
 $('feed').onclick = () => update({ feed: state.config.feed === false });
 $('feed-hint').onclick = () => update({ feedHint: state.config.feedHint === false });
 $('auto-update').onclick = () => update({ autoUpdate: state.config.autoUpdate === false });

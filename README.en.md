@@ -132,7 +132,7 @@ Then open `~/.claude/settings.json` and delete every entry under `hooks` that me
 ## Settings panel
 
 - **Octopuses**: which project each one belongs to, what it's doing and how much context it has used. Jump back to its session, put it to sleep or wake it up
-- **Play**: dancing to music, following the time of day, pomodoro length, global shortcuts (when on, Ctrl+Alt+O calls the octopuses to the middle of the screen you're looking at from anywhere, and Ctrl+Alt+G opens the Octopus Arcade; you're told if another program already has the shortcut)
+- **Play**: dancing to music, following the time of day, quiet hours (say 22:00 to 8:00: during them it only comes to you for approvals and questions, with no chatter, no chimes and no daily report; it goes back to normal afterwards without touching your bubble setting), pomodoro length, global shortcuts (when on, Ctrl+Alt+O calls the octopuses to the middle of the screen you're looking at from anywhere, and Ctrl+Alt+G opens the Octopus Arcade; you're told if another program already has the shortcut)
 - **Appearance**: size, main color, speech bubbles (Alerts only / Brief / Full), window collisions, context window (auto / 200K / 1M), sounds, system notifications in full screen, language
 - **Wardrobe**: one item each for head, face and neck. Locked items show how to unlock them. The holiday row shows what it wears for each holiday this year, plus a switch for holiday outfits
 - **Achievements**: progress and unlock dates for all 21
