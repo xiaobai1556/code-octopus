@@ -423,8 +423,9 @@ try {
 } catch {}
 
 const bestOf = (id) => (scores[id] && scores[id].best) || 0;
-// 今日挑战：同一天、同一个游戏，种子一样，大家玩的是同一局。daily = { day, scores: { bugs: 今天最好, ... } }
-let daily = { day: '', scores: {} };
+// 今日挑战：同一天、同一个游戏，种子一样，大家玩的是同一局。
+// daily = { day, scores: { bugs: 今天最好, ... }, streak: 连续打卡 { last, n, best } }
+let daily = { day: '', scores: {}, streak: {} };
 let runDay = null; // 这一局是哪天的今日挑战（平常的一局是 null）
 const dailyBestOf = (id) => (daily.day === ARCADE_RNG.dayKey() && daily.scores[id]) || 0;
 const shortDay = (key) => key.slice(5).replace('-', '/').replace(/^0/, '').replace('/0', '/');
@@ -485,9 +486,11 @@ async function finishRun() {
       scores[def.id] = { ...(scores[def.id] || {}), best: r.best, plays: r.plays };
       result.best = r.best;
       if (runDay && r.dailyBest != null) {
-        if (daily.day !== runDay) daily = { day: runDay, scores: {} };
+        if (daily.day !== runDay) daily = { ...daily, day: runDay, scores: {} };
         daily.scores[def.id] = r.dailyBest;
         result.dailyBest = r.dailyBest;
+        daily.streak = ARCADE_RNG.bumpStreak(daily.streak, runDay);
+        result.streak = r.streak || daily.streak.n;
       }
       if (r.achievements) achievements = r.achievements;
       // 刚解锁的成就：结算里亮出来
@@ -577,6 +580,7 @@ function drawMenu(dt) {
   g.pet(W / 2 - g.measure(tr('arc.title'), { size: 17, weight: 800 }) / 2 - 22, 36 + top, 1.6, { eyes: 'happy', armR: wave ? 'high' : 1, blush: true, t });
   g.text(tr('arc.title'), W / 2, 24 + top, { size: 17, weight: 800, color: C.cream, align: 'center' });
   g.text(tr('arc.subtitle'), W / 2, 44 + top, { size: 7.5, color: C.dim, align: 'center' });
+  drawStreak();
 
   ARCADE.games.forEach((game, i) => {
     const r = cardRect(i);
@@ -615,6 +619,19 @@ function drawMenu(dt) {
     }
   });
   g.text(tr(grid() ? 'arc.menuHintGrid' : 'arc.menuHint'), W / 2, H - 12, { size: 6.5, color: C.dim, align: 'center' });
+}
+
+// 菜单右上角：今日挑战连续打卡几天；今天还没玩就提醒一句
+function drawStreak() {
+  const st = ARCADE_RNG.streakOn(daily.streak, ARCADE_RNG.dayKey());
+  if (!st.n) return;
+  const label = tr('arc.streak', { n: st.n });
+  const o = { size: 6.5, weight: 800 };
+  const w = g.measure(label, o) + 12;
+  const x = W - 8 - w;
+  g.round(x, 6, w, 13, 6.5, st.doneToday ? C.gold : '#3A4160', null);
+  g.text(label, x + w / 2, 12.8, { ...o, color: st.doneToday ? '#3A2600' : C.cream, align: 'center' });
+  if (!st.doneToday) g.text(tr('arc.streakTodo'), W - 8, 26, { size: 5.8, color: C.dim, align: 'right' });
 }
 
 // 游戏的小画面画在圆角框里，超出的部分裁掉
@@ -737,7 +754,8 @@ function drawOver(dt) {
   overT += dt;
   g.rect(0, 0, W, H, `rgba(15,17,28,${Math.min(0.66, overT * 2)})`);
   // 刚解锁的成就放在最后，金色
-  const lines = [...(result.summary || []), ...result.unlocked.map((u) => ({ text: tr('arc.unlocked', { name: tr(`ach.${u.id}`), item: tr(`item.${u.item}`) }), color: '#B9861F', bold: true }))];
+  const streakLine = result.day && result.streak ? [{ text: tr(result.streak > 1 ? 'arc.streakLine' : 'arc.streakFirst', { n: result.streak }), color: '#B9861F' }] : [];
+  const lines = [...(result.summary || []), ...streakLine, ...result.unlocked.map((u) => ({ text: tr('arc.unlocked', { name: tr(`ach.${u.id}`), item: tr(`item.${u.item}`) }), color: '#B9861F', bold: true }))];
   const ph = 140 + lines.length * 10.5;
   const p = { x: W / 2 - 120, y: Math.max(8, H / 2 - ph / 2), w: 240, h: ph };
   const rise = Math.max(0, 1 - overT * 4) * 20;
@@ -868,7 +886,7 @@ function mockApi() {
     info: async () => {
       const all = load();
       const day = ARCADE_RNG.dayKey();
-      return { locale: I18N.detect(navigator.languages), color: 0, outfit: OUTFITS.effective({}, true), sound: true, scores: all, daily: { day, scores: (all.daily && all.daily[day]) || {} } };
+      return { locale: I18N.detect(navigator.languages), color: 0, outfit: OUTFITS.effective({}, true), sound: true, scores: all, daily: { day, scores: (all.daily && all.daily[day]) || {}, streak: all.streak || {} } };
     },
     saveScore: async (game, score, _metrics, day) => {
       const all = load();
@@ -881,11 +899,12 @@ function mockApi() {
         const d = (all.daily[day] = all.daily[day] || {});
         d[game] = Math.max(d[game] || 0, score);
         dailyBest = d[game];
+        all.streak = ARCADE_RNG.bumpStreak(all.streak, day);
       }
       try {
         localStorage.setItem('arcade-scores', JSON.stringify(all));
       } catch {}
-      return { best: all[game].best, prev, record: score > prev, plays: all[game].plays, dailyBest };
+      return { best: all[game].best, prev, record: score > prev, plays: all[game].plays, dailyBest, streak: day ? all.streak.n : null };
     },
   };
 }

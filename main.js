@@ -1507,7 +1507,7 @@ function registerArcadeIpc() {
     outfit: OUTFITS.effective(config.outfit, config.holidays),
     sound: config.sound !== false,
     scores: arcade.summary(),
-    daily: { day: dayKey(), scores: arcade.dailyOf(dayKey()) },
+    daily: { day: dayKey(), scores: arcade.dailyOf(dayKey()), streak: arcade.streak() },
     achievements: achievements.progress(stats).filter((a) => a.game),
   }));
   ipcMain.handle('arcade:score', (_e, game, score, metrics, day) => {
@@ -1519,6 +1519,7 @@ function registerArcadeIpc() {
       if (Number.isFinite(v) && v > 0) clean[key] = Math.min(v, 1_000_000);
     }
     stats.recordArcade(game, clean);
+    if (r.streak) stats.recordArcade('daily', { streak: r.streak }); // 今日挑战连续打卡的成就看这个
     stats.recordGame(game, score);
     // 解锁了成就：桌面上的小章鱼来庆祝（顺手穿上新装扮）；没有成就但破了以前的纪录（第一局不算）：也来庆祝一下
     const fresh = achievements.evaluate(stats);

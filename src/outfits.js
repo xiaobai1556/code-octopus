@@ -19,6 +19,7 @@
     goggles: { slot: 'face' },
     monocle: { slot: 'face' },
     shield: { slot: 'neck' },
+    medal: { slot: 'neck' },
     glasses: { slot: 'face' },
     sunglasses: { slot: 'face' },
     bowtie: { slot: 'neck' },

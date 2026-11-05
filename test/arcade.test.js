@@ -12,7 +12,7 @@ const tmpFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'octo-arca
 test('最高分：破纪录才更新，次数每局加一，存盘读回来一样', () => {
   const file = tmpFile();
   const a = new ArcadeScores(file);
-  const plain = { dailyBest: null, dailyRecord: false }; // 不是今日挑战
+  const plain = { dailyBest: null, dailyRecord: false, streak: null }; // 不是今日挑战
   assert.deepEqual(a.record('bugs', 120), { best: 120, prev: 0, record: true, plays: 1, ...plain });
   assert.deepEqual(a.record('bugs', 80), { best: 120, prev: 120, record: false, plays: 2, ...plain });
   assert.deepEqual(a.record('bugs', 120), { best: 120, prev: 120, record: false, plays: 3, ...plain }); // 平了不算破
@@ -110,8 +110,8 @@ test('每个成就和它送的装扮都有名字，装扮都登记过部位，�
 
 test('今日挑战：按天记最好成绩，也算进总的最高分，只留最近两周', () => {
   const a = new ArcadeScores(tmpFile());
-  assert.deepEqual(a.record('hop', 50, '2026-11-05'), { best: 50, prev: 0, record: true, plays: 1, dailyBest: 50, dailyRecord: true });
-  assert.deepEqual(a.record('hop', 30, '2026-11-05'), { best: 50, prev: 50, record: false, plays: 2, dailyBest: 50, dailyRecord: false });
+  assert.deepEqual(a.record('hop', 50, '2026-11-05'), { best: 50, prev: 0, record: true, plays: 1, dailyBest: 50, dailyRecord: true, streak: 1 });
+  assert.deepEqual(a.record('hop', 30, '2026-11-05'), { best: 50, prev: 50, record: false, plays: 2, dailyBest: 50, dailyRecord: false, streak: 1 });
   assert.equal(a.record('hop', 40, '2026-11-06').dailyRecord, true); // 新的一天重新算
   assert.deepEqual(a.dailyOf('2026-11-05'), { hop: 50 });
   assert.deepEqual(a.dailyOf('2026-11-07'), {});
@@ -119,6 +119,31 @@ test('今日挑战：按天记最好成绩，也算进总的最高分，只留�
   for (let d = 10; d < 30; d++) a.record('bugs', d, `2026-11-${d}`);
   assert.equal(Object.keys(a.data.daily).length, 14);
   assert.deepEqual(a.dailyOf('2026-11-05'), {});
+});
+
+test('今日挑战连续打卡：隔天接着算，同一天不重复算，断一天从 1 开始，跨月跨年也对', () => {
+  const { bumpStreak, streakOn, prevDay } = require('../src/rng');
+  assert.equal(prevDay('2026-03-01'), '2026-02-28');
+  assert.equal(prevDay('2024-03-01'), '2024-02-29');
+  assert.equal(prevDay('2027-01-01'), '2026-12-31');
+  let st = {};
+  for (const day of ['2026-12-30', '2026-12-31', '2026-12-31', '2027-01-01']) st = bumpStreak(st, day);
+  assert.deepEqual(st, { last: '2027-01-01', n: 3, best: 3 });
+  assert.deepEqual(bumpStreak(st, '2026-12-20'), st); // 日期往回走：不变
+  st = bumpStreak(st, '2027-01-03'); // 断了一天
+  assert.deepEqual(st, { last: '2027-01-03', n: 1, best: 3 });
+  // 还连不连着：今天玩过、昨天玩过（今天还没玩）都算连着，再早就断了
+  assert.deepEqual(streakOn(st, '2027-01-03'), { n: 1, best: 3, doneToday: true });
+  assert.deepEqual(streakOn(st, '2027-01-04'), { n: 1, best: 3, doneToday: false });
+  assert.deepEqual(streakOn(st, '2027-01-05'), { n: 0, best: 3, doneToday: false });
+  assert.deepEqual(streakOn(undefined, '2027-01-05'), { n: 0, best: 0, doneToday: false });
+  // 存在成绩里，平常的一局不算打卡
+  const file = tmpFile();
+  const a = new ArcadeScores(file);
+  a.record('bugs', 10, '2026-11-04');
+  a.record('stack', 10);
+  assert.equal(a.record('typing', 10, '2026-11-05').streak, 2);
+  assert.deepEqual(new ArcadeScores(file).streak(), { last: '2026-11-05', n: 2, best: 2 });
 });
 
 test('播种的随机数：同一个种子同一串，不同种子不一样，都在 [0, 1)', () => {

@@ -318,6 +318,15 @@ function drawNeck(px, item, top, grow, bottom) {
     px(7, top + 7, 2, 1, B);
     px(8, top + 5, 1, 1, '#FFFFFF');
     px(7, top + 6, 1, 1, '#FFFFFF');
+  } else if (item === 'medal') {
+    // 今日挑战连续打卡的成就：红蓝绶带挂一枚金牌
+    px(6, top + 3, 1, 1, '#3D6FD9');
+    px(9, top + 3, 1, 1, '#D94F4F');
+    px(7, top + 4, 1, 1, '#3D6FD9');
+    px(8, top + 4, 1, 1, '#D94F4F');
+    px(6, top + 5, 4, 2, '#F2C14E');
+    px(7, top + 7, 2, 1, '#D9A22E');
+    px(7, top + 5, 1, 1, '#FFE08A'); // 反光
   } else if (item === 'plaid') {
     // 程序员节：格子衫（盖住下半身）
     const x0 = 2 - grow;
