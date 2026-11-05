@@ -142,6 +142,7 @@ function renderAppearance() {
   );
 
   $('sound').setAttribute('aria-checked', String(config.sound !== false));
+  $('notify').setAttribute('aria-checked', String(config.notifyFullscreen !== false));
 
   const lang = $('lang');
   if (document.activeElement !== lang) {
@@ -525,6 +526,7 @@ $('feed-open').onclick = () => api.action('open-belly');
 $('spit').onclick = () => api.action('spit').then(refresh);
 $('tour').onclick = () => api.action('tour');
 $('sound').onclick = () => update({ sound: state.config.sound === false });
+$('notify').onclick = () => update({ notifyFullscreen: state.config.notifyFullscreen === false });
 $('report').onclick = () => api.action('report');
 $('arcade').onclick = () => api.action('arcade');
 $('lang').onchange = (e) => {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu, dialog, nativeTheme, powerMonitor, clipboard, shell } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, dialog, nativeTheme, powerMonitor, clipboard, shell, Notification } = require('electron');
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
@@ -20,6 +20,7 @@ const I18N = require('./src/i18n');
 const { trayIcon } = require('./src/icon');
 const { writeJsonAtomic } = require('./src/jsonfile');
 const { ArcadeScores } = require('./src/arcade');
+const notify = require('./src/notify');
 
 const tr = I18N.t;
 const PORT = Number(process.env.CLAUDE_PET_PORT) || 23333;
@@ -48,7 +49,7 @@ let tray = null;
 let config = {
   scale: 5, bubbles: 'full', collide: true, color: 0, lang: 'auto', contextWindow: 'auto', sound: true, lastReportDay: '',
   outfit: { head: '', face: '', neck: '' }, holidays: true, feed: true, feedDir: '', feedHint: true, lastHungryDay: '', onboarded: false, autoUpdate: true,
-  approveOnPet: false, dance: true, timeOfDay: true, pomodoroMin: 25,
+  approveOnPet: false, dance: true, timeOfDay: true, pomodoroMin: 25, notifyFullscreen: true,
 };
 const POMODORO_MINUTES = [15, 25, 45];
 const BUBBLE_MODES = ['alerts', 'brief', 'full'];
@@ -681,6 +682,7 @@ function onHookRequest(url, text, remotePort) {
     ev.longTask = ev.event === 'Stop' && ev.turnMs >= LONG_TASK_MS && !(info.hwnd && foregroundWindow() === info.hwnd);
   }
   const target = overlayForSession(ev.sessionId, info);
+  fullscreenToast(ev, info, target);
   if (ev.event === 'SessionEnd') {
     sessions.delete(ev.sessionId);
     sessionOverlay.delete(ev.sessionId);
@@ -692,6 +694,38 @@ function onHookRequest(url, text, remotePort) {
   if (recentEvents.length > 30) recentEvents.shift();
   sendTo(target, 'claude-event', ev);
   if (stats) unlock(achievements.evaluate(stats), target, ev.sessionId);
+}
+
+// ---------- 全屏时用系统通知 ----------
+// 这个会话的小章鱼所在的屏被全屏应用盖住了（覆盖层藏起来了），要你批准、问你问题、长任务做完了：弹系统通知，点它回到会话
+const toastAt = {};
+const recentToasts = []; // /state 里能看到
+const liveToasts = new Set(); // 通知对象要留着引用，被回收了点它就没反应
+
+function fullscreenToast(ev, info, target) {
+  const hit = notify.shouldToast(ev, {
+    enabled: config.notifyFullscreen !== false,
+    hidden: !!(target && target.hidden),
+    watching: !!(info.hwnd && foregroundWindow() === info.hwnd),
+    lastAt: toastAt,
+  });
+  if (!hit) return;
+  toastAt[hit.key] = Date.now();
+  const text = notify.toastText(ev, hit.kind, tr);
+  const shown = Notification.isSupported();
+  recentToasts.push({ at: new Date().toISOString(), kind: hit.kind, sessionId: ev.sessionId, ...text, shown });
+  if (recentToasts.length > 10) recentToasts.shift();
+  if (!shown) return;
+  const n = new Notification({ title: text.title, body: text.body, icon: trayIcon(), silent: config.sound === false });
+  liveToasts.add(n);
+  const forget = () => liveToasts.delete(n);
+  n.on('click', () => {
+    forget();
+    focusSession(ev.sessionId);
+  });
+  n.on('close', forget);
+  setTimeout(forget, 10 * 60 * 1000);
+  n.show();
 }
 
 function focusSession(sessionId) {
@@ -760,6 +794,8 @@ function onPermissionRequest(req, res, text) {
   // 你正看着那个会话的窗口：交给终端。找不到会话窗口时也交给终端：没法知道你是不是正看着终端，
   // 扣住请求的话，终端里的 Claude 会一直卡着，切回窗口也不会放行
   if (!ev || !info || !config.approveOnPet || !info.hwnd || foregroundWindow() === info.hwnd) return reply(res, null);
+  // 小章鱼所在的屏被全屏应用盖住了：气泡里的按钮你看不到，也交给终端（这时会弹系统通知）
+  if (overlayForSession(ev.sessionId, info).hidden) return reply(res, null);
   const hash = crypto.createHash('sha1').update(text).digest('hex');
   let ask = [...asks.values()].find((a) => a.hash === hash);
   if (!ask) {
@@ -1031,7 +1067,7 @@ function startServer() {
           const state = {
             screens, pets, petDragging, dragOverlay: dragOverlay && dragOverlay.id, externalDrag, lastPressAt, buttons, captureLog, userDragging, drags, duplicatesDropped, userAway, locale: locale(),
             sessions: [...sessions].map(([id, s]) => ({ id, hwnd: s.hwnd, exe: s.exe, used: s.used, limit: contextLimit(s), costUSD: s.costUSD, screen: sessionOverlay.get(id) })),
-            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents, errors: recentErrors,
+            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents, errors: recentErrors, toasts: recentToasts,
           };
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(state));
@@ -1288,7 +1324,7 @@ function registerSettingsIpc() {
     if (Number.isInteger(patch.color) && patch.color >= 0 && patch.color < 6) clean.color = patch.color;
     if (patch.lang === 'auto' || I18N.NAMES[patch.lang]) clean.lang = patch.lang;
     if (CONTEXT_WINDOWS.includes(patch.contextWindow)) clean.contextWindow = patch.contextWindow;
-    for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
+    for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay', 'notifyFullscreen']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
     if (POMODORO_MINUTES.includes(patch.pomodoroMin)) clean.pomodoroMin = patch.pomodoroMin;
     const outfit = cleanOutfit(patch.outfit);
     if (outfit) clean.outfit = outfit;
@@ -1532,9 +1568,10 @@ let pendingUnlocks = []; // 启动时按以前的记录补解锁的成就，等�
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  // 要和 electron-builder.config.js 里的 appId 一样：安装包建的快捷方式用的是 appId，
-  // 不一样的话任务栏会把运行中的窗口和固定的图标当成两个程序（数据目录为了老用户留着旧名字，这个不用）
-  app.setAppUserModelId('io.github.code-octopus');
+  // 安装版要和 electron-builder.config.js 里的 appId 一样：安装包建的快捷方式用的是 appId，
+  // 不一样的话任务栏会把运行中的窗口和固定的图标当成两个程序，系统通知也弹不出来（数据目录为了老用户留着旧名字，这个不用）。
+  // 从源码跑（npm start）没有开始菜单快捷方式，用 electron.exe 的路径，Windows 才认这个程序、肯弹它的通知
+  app.setAppUserModelId(app.isPackaged ? 'io.github.code-octopus' : process.execPath);
   app.whenReady().then(() => {
     loadConfig();
     I18N.setLang(locale());
