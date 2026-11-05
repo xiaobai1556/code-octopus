@@ -1,12 +1,19 @@
 # 发版：推一个 v 开头的标签（比如 v0.4.0，要和 package.json 的版本一致），在 Windows 上跑测试、打包，
 # 把安装包和 latest.yml 传到 GitHub Releases 的一份草稿里。在网页上看过没问题再点发布；发布之后，
 # 装了旧版的人才会收到自动更新（草稿对自动更新不可见）。
-# 在 Actions 页面手动运行（Run workflow）只打包，安装包放在这次运行的 Artifacts 里，不碰 Releases。
+# 改了发布流程或打包配置的推送、以及在 Actions 页面手动运行（Run workflow），都只打包：
+# 安装包放在这次运行的 Artifacts 里，不碰 Releases。
 name: Release
 
 on:
   push:
     tags: ['v*']
+    branches: ['**']
+    # 只对分支推送生效（推标签时 GitHub 不看 paths）
+    paths:
+      - .github/workflows/release.yml
+      - electron-builder.config.js
+      - package-lock.json
   workflow_dispatch:
 
 permissions:
