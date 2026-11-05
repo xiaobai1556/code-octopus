@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const CHANNELS = [
   'platforms', 'cursor', 'press', 'press-move', 'press-end', 'menu-at', 'claude-event', 'config', 'pet-command', 'summon', 'demo',
   'user-away', 'user-back', 'report-ready', 'layout', 'import-pet', 'evacuate', 'drag-transfer', 'spawn', 'achievement', 'hungry', 'tour', 'update-ready',
-  'permission-ask', 'permission-done', 'notes', 'pomodoro', 'pomodoro-ring', 'note-ring', 'music', 'beat', 'arcade-record',
+  'permission-ask', 'permission-done', 'notes', 'pomodoro', 'pomodoro-ring', 'note-ring', 'music', 'beat', 'arcade-record', 'level-up',
 ];
 
 contextBridge.exposeInMainWorld('petHost', {

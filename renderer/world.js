@@ -1697,6 +1697,14 @@ if (host) {
     world.transfer(pet, to, { drag: d });
   });
   host.on('achievement', ({ ids, items, sessionId }) => world.messenger(sessionId).celebrateUnlock(ids, items));
+  // 养成等级升级：撒彩纸，说升到几级、现在是什么称号
+  host.on('level-up', ({ level, title, sessionId }) => {
+    const pet = world.messenger(sessionId);
+    pet.touch();
+    pet.doEmote('cheer', 2.2);
+    world.confetti(pet);
+    pet.say(tr('say.levelUp', { n: level, title: tr(`level.${title}`) }), 3.5, true);
+  });
   host.on('hungry', ({ count }) => {
     const pet = world.pets.find((p) => !p.activity && !p.leaving && !p.leaveAt && !p.visitor && !p.game);
     if (pet) pet.hungry(count);

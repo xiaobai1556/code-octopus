@@ -322,6 +322,13 @@ function renderFishdex() {
 
 function renderAchievements() {
   const list = state.achievements;
+  const lv = state.level;
+  $('level').hidden = !lv;
+  if (lv) {
+    $('level-name').textContent = tr('set.level', { n: lv.level, title: tr(`level.${lv.title}`) });
+    $('level-xp').textContent = tr('set.levelXp', { xp: lv.xp.toLocaleString(), next: lv.next.toLocaleString() });
+    $('level-bar').style.width = `${Math.round(((lv.xp - lv.cur) / Math.max(1, lv.next - lv.cur)) * 100)}%`;
+  }
   const palette = PALETTES[state.config.color || 0];
   $('ach-count').textContent = tr('set.achCount', { n: list.filter((a) => a.unlockedAt).length, total: list.length });
   $('ach-list').replaceChildren(
@@ -529,7 +536,7 @@ function render() {
   }
   if (changed('appearance', [state.config, state.systemLocale])) renderAppearance();
   if (changed('wardrobe', [state.config.outfit, state.config.holidays, state.config.color, state.holiday, state.achievements])) renderWardrobe();
-  if (changed('achievements', [state.achievements, state.config.color])) renderAchievements();
+  if (changed('achievements', [state.achievements, state.config.color, state.level])) renderAchievements();
   if (changed('fishdex', [state.catches])) renderFishdex();
   if (changed('feed', [state.config.feed, state.config.feedHint, state.config.feedDir, state.lastBite])) renderFeed();
   if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin, state.config.hotkeys, state.hotkeys, state.config.quietHours, state.config.quietFrom, state.config.quietTo, state.quietNow])) renderPlay();

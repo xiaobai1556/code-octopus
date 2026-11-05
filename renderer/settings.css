@@ -583,6 +583,27 @@ footer {
   background: var(--accent);
 }
 
+/* ---------- 养成等级 ---------- */
+.level {
+  margin: 4px 0 10px;
+}
+.level small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.level .bar {
+  margin-top: 5px;
+  height: 6px;
+  background: var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.level .bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
 /* ---------- 钓鱼图鉴 ---------- */
 .fishdex {
   list-style: none;

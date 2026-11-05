@@ -89,6 +89,7 @@ class Stats {
     } catch {}
     if (!this.data.totals) Object.assign(this.data, totalsFromDays(this.data.days));
     this.data.totals = { ...emptyTotals(), ...this.data.totals };
+    this.data.best = { dayTools: 0, streak: 0, turnMs: 0, ...this.data.best }; // 文件里缺了也不至于启动就崩
     this.turns = new Map(); // sessionId → 这一轮开始的时间
     this.saveTimer = null;
   }

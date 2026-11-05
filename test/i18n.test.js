@@ -55,3 +55,14 @@ test('t：填占位符，缺的键回落到英文再回落到键名', () => {
   assert.equal(I18N.t('no.such.key'), 'no.such.key');
   I18N.setLang('en');
 });
+
+test('成就名字不重名（每种语言里）', () => {
+  for (const [lang, S] of Object.entries(I18N.STRINGS)) {
+    const seen = new Map();
+    for (const [k, v] of Object.entries(S)) {
+      if (!/^ach\.[a-z0-9]+$/i.test(k)) continue;
+      assert.ok(!seen.has(v), `${lang}: ${k} 和 ${seen.get(v)} 都叫「${v}」`);
+      seen.set(v, k);
+    }
+  }
+});

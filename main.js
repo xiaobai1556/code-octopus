@@ -23,6 +23,7 @@ const { ArcadeScores } = require('./src/arcade');
 const notify = require('./src/notify');
 const { inQuietHours } = require('./src/quiet');
 const backup = require('./src/backup');
+const LEVEL = require('./src/level');
 
 const tr = I18N.t;
 const PORT = Number(process.env.CLAUDE_PET_PORT) || 23333;
@@ -716,6 +717,17 @@ function onHookRequest(url, text, remotePort) {
   if (recentEvents.length > 30) recentEvents.shift();
   sendTo(target, 'claude-event', ev);
   if (stats) unlock(achievements.evaluate(stats), target, ev.sessionId);
+  if (stats) checkLevel(target, ev.sessionId);
+}
+
+// 养成等级：经验涨过了下一级，让那只小章鱼庆祝一下。第一次（还没记过等级）只记下来，不补庆祝
+function checkLevel(target, sessionId) {
+  const lv = LEVEL.levelOf(LEVEL.xpOf(stats.data.totals));
+  const known = stats.data.level;
+  if (known != null && lv.level <= known) return;
+  stats.data.level = lv.level;
+  stats.scheduleSave();
+  if (known != null) sendTo(target || cursorOverlay(), 'level-up', { level: lv.level, title: lv.title, sessionId });
 }
 
 // ---------- 全屏时用系统通知 ----------
@@ -1355,6 +1367,7 @@ function registerSettingsIpc() {
       holiday: OUTFITS.holiday(),
       lastBite: bite ? bite.files.length : 0,
       catches: stats.data.catches || {},
+      level: LEVEL.levelOf(LEVEL.xpOf(stats.data.totals)),
       update: updater.status(),
       hotkeys: hotkeyStatus,
       quietNow: quietNow(),
@@ -1467,7 +1480,7 @@ function openReport(date) {
 function registerReportIpc() {
   ipcMain.handle('report:get', (_e, date) => {
     const key = date || dayKey();
-    return { date: key, today: dayKey(), day: stats.get(key), dates: stats.dates(), trend: stats.range(key, 30), locale: locale(), color: config.color, outfit: OUTFITS.effective(config.outfit, config.holidays) };
+    return { date: key, today: dayKey(), day: stats.get(key), dates: stats.dates(), trend: stats.range(key, 30), level: LEVEL.levelOf(LEVEL.xpOf(stats.data.totals)), locale: locale(), color: config.color, outfit: OUTFITS.effective(config.outfit, config.holidays) };
   });
   // 截取卡片那一块：复制到剪贴板，或者存到 图片\Code Octopus 里
   const capture = (rect) => reportWin.webContents.capturePage(rect && rect.width ? rect : undefined);
@@ -1708,6 +1721,7 @@ if (!app.requestSingleInstanceLock()) {
       saveConfig();
     }
     stats = new Stats(path.join(app.getPath('userData'), 'stats.json'));
+    checkLevel(null);
     arcade = new ArcadeScores(path.join(app.getPath('userData'), 'arcade.json'));
     feeder = new Feeder(path.join(app.getPath('userData'), 'feed-log.json'), [app.getAppPath(), app.getPath('userData'), path.dirname(process.execPath)]);
     pendingUnlocks = achievements.evaluate(stats);

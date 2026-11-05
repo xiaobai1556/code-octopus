@@ -355,6 +355,24 @@ function drawNeck(px, item, top, grow, bottom) {
     px(7, top + 7, 2, 1, B);
     px(8, top + 5, 1, 1, '#FFFFFF');
     px(7, top + 6, 1, 1, '#FFFFFF');
+  } else if (item === 'lanyard') {
+    // 养成等级 10 级：脖子上挂一张工牌
+    const L = '#3B6FD6';
+    px(4, top + 3, 1, 1, L);
+    px(11, top + 3, 1, 1, L);
+    px(5, top + 4, 1, 1, L);
+    px(10, top + 4, 1, 1, L);
+    px(6, top + 5, 4, 3, '#F4F1EA');
+    px(6, top + 5, 4, 1, L);
+    px(7, top + 6, 1, 1, '#D97757'); // 照片
+    px(8, top + 6, 1, 1, '#B8BEC9');
+  } else if (item === 'cape') {
+    // 养成等级 25 级：背后一件红披风，领口一道深红
+    const R = '#C2452D';
+    px(2, top + 2, 12, 1, '#8E2F1F');
+    px(0, top + 3, 2, bottom - top - 3, R);
+    px(0, bottom - 1, 1, 2, R);
+    px(1, bottom, 1, 1, '#8E2F1F');
   } else if (item === 'necktie') {
     // 提交 100 次的成就：一条深蓝色领带，中间一道金色斜纹
     const N = '#2B4C9B';

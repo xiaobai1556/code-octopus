@@ -77,7 +77,7 @@ function render() {
   $('next').disabled = data.date >= data.today;
   $('day-label').textContent = data.date;
   $('title').textContent = tr('rep.title', { date: prettyDate(data.date) });
-  $('subtitle').textContent = tr('rep.subtitle');
+  $('subtitle').textContent = data.level ? `${tr('rep.subtitle')} · ${tr('rep.level', { n: data.level.level, title: tr(`level.${data.level.title}`) })}` : tr('rep.subtitle');
   $('footer').textContent = `${tr('app.name')} · ${tr('set.unofficial')}`;
 
   const palette = PALETTES[data.color || 0] || PALETTES[0];

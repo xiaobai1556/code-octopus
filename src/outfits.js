@@ -23,6 +23,8 @@
     monocle: { slot: 'face' },
     shield: { slot: 'neck' },
     medal: { slot: 'neck' },
+    lanyard: { slot: 'neck' },
+    cape: { slot: 'neck' },
     necktie: { slot: 'neck' },
     glasses: { slot: 'face' },
     sunglasses: { slot: 'face' },

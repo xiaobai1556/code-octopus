@@ -1,4 +1,7 @@
 const { CATCHES } = require('./catches');
+const LEVEL = require('./level');
+
+const levelOf = (s) => LEVEL.levelOf(LEVEL.xpOf(s.totals)).level;
 
 // 成就：按 stats.json 里的累计数字判断，解锁一个送一件装扮（见 src/outfits.js）。
 // value(stats) 读当前进度，到 goal 就解锁；解锁时间记在 stats.data.unlocked 里。
@@ -17,6 +20,8 @@ const LIST = [
   { id: 'foodie', item: 'chefhat', goal: 10, value: (s) => s.totals.eaten }, // 喂它吃 10 个文件
   { id: 'dailyfan', item: 'medal', goal: 7, value: (s) => arcade(s, 'daily', 'streak') }, // 今日挑战连续玩 7 天
   { id: 'shipper', item: 'necktie', goal: 100, value: (s) => s.totals.commits || 0 }, // Claude 帮你提交了 100 次
+  { id: 'lv10', item: 'lanyard', goal: 10, value: levelOf }, // 养成等级 10 级：工牌
+  { id: 'lv25', item: 'cape', goal: 25, value: levelOf }, // 养成等级 25 级：披风
   { id: 'angler', item: 'buckethat', goal: CATCHES.length, value: (s) => Object.keys(s.catches || {}).length }, // 钓鱼图鉴集齐
   // 章鱼游戏厅：每个游戏一个（game 是哪个游戏，游戏厅的规则页会显示它）
   { id: 'debugger', game: 'bugs', item: 'bugclip', goal: 8, value: (s) => arcade(s, 'bugs', 'level') }, // 捉虫打到第 8 轮迭代
