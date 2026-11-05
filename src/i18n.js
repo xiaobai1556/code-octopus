@@ -1832,7 +1832,7 @@
       'tour.touch': 'Drag me, throw me, double-click me',
       'tour.touchSub': 'Right-click for a menu. Drop files on me and I tidy them away',
       'tour.play': 'When you have a minute, play a game with me',
-      'tour.playSub': '"Mini games…" in the right-click menu: seven games plus a daily challenge, and playing well earns outfits',
+      'tour.playSub': '“Mini games…” in the right-click menu: seven games plus a daily challenge, and playing well earns outfits',
       'tour.connect': 'Last step: connect me to Claude Code',
       'tour.connectSub': 'Just click “Install” in Settings',
       'tour.connectHint': 'Click me to open Settings',
