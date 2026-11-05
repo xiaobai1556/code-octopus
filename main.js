@@ -50,12 +50,12 @@ let tray = null;
 // feed：拖文件喂它；feedDir：章鱼的肚子在哪；feedHint：下载文件夹太乱时提醒；onboarded：看过新手引导；
 // approveOnPet：在桌宠身上直接批准权限请求；dance：放歌时跳舞；timeOfDay：跟着时间变化；pomodoroMin：番茄钟多少分钟；
 // quietHours / quietFrom / quietTo：免打扰时段（几点到几点只提醒要你做决定的事、不响提示音）；
-// breakReminder / breakMin：连续在电脑前多少分钟提醒你休息
+// breakReminder / breakMin：连续在电脑前多少分钟提醒你休息；costAlert：当天花费超过多少美元提醒一次（0 是关）
 let config = {
   scale: 5, bubbles: 'full', collide: true, color: 0, lang: 'auto', contextWindow: 'auto', sound: true, lastReportDay: '',
   outfit: { head: '', face: '', neck: '' }, holidays: true, feed: true, feedDir: '', feedHint: true, lastHungryDay: '', onboarded: false, autoUpdate: true,
   approveOnPet: false, dance: true, timeOfDay: true, pomodoroMin: 25, notifyFullscreen: true, hotkeys: false,
-  quietHours: false, quietFrom: 22, quietTo: 8, breakReminder: true, breakMin: 60,
+  quietHours: false, quietFrom: 22, quietTo: 8, breakReminder: true, breakMin: 60, costAlert: 0,
 };
 const POMODORO_MINUTES = [15, 25, 45];
 const BUBBLE_MODES = ['alerts', 'brief', 'full'];
@@ -511,6 +511,7 @@ function checkUserIdle() {
 // 连着在电脑前 breakMin 分钟（中间没离开过 5 分钟以上），小章鱼端杯水来提醒一次，然后重新计时。
 // 免打扰时段、番茄钟进行中（它自己安排休息）、全屏看视频玩游戏时不提醒
 const BREAK_REMIND_MINUTES = [45, 60, 90];
+const COST_ALERTS = [0, 5, 10, 20, 50];
 let workSince = Date.now();
 function checkBreak() {
   if (userAway) {
@@ -737,6 +738,17 @@ function onHookRequest(url, text, remotePort) {
   sendTo(target, 'claude-event', ev);
   if (stats) unlock(achievements.evaluate(stats), target, ev.sessionId);
   if (stats) checkLevel(target, ev.sessionId);
+  if (stats) checkCost(target, ev.sessionId);
+}
+
+// 花费提醒：当天花费第一次超过设的金额，提醒一次（免打扰时段里先不说，过了再说）
+function checkCost(target, sessionId) {
+  const limit = config.costAlert;
+  const d = stats.get(dayKey());
+  if (!limit || !d || d.costAlerted || (d.costUSD || 0) < limit || quietNow()) return;
+  d.costAlerted = true;
+  stats.scheduleSave();
+  sendTo(target || cursorOverlay(), 'cost-alert', { spent: d.costUSD, limit, sessionId });
 }
 
 // /summary 的内容：今天的数字、等级、钓鱼图鉴
@@ -1442,6 +1454,7 @@ function registerSettingsIpc() {
     for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay', 'notifyFullscreen', 'hotkeys', 'quietHours', 'breakReminder']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
     for (const key of ['quietFrom', 'quietTo']) if (Number.isInteger(patch[key]) && patch[key] >= 0 && patch[key] < 24) clean[key] = patch[key];
     if (BREAK_REMIND_MINUTES.includes(patch.breakMin)) clean.breakMin = patch.breakMin;
+    if (COST_ALERTS.includes(patch.costAlert)) clean.costAlert = patch.costAlert;
     if (POMODORO_MINUTES.includes(patch.pomodoroMin)) clean.pomodoroMin = patch.pomodoroMin;
     const outfit = cleanOutfit(patch.outfit);
     if (outfit) clean.outfit = outfit;

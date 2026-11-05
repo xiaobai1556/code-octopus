@@ -390,6 +390,15 @@ function renderPlay() {
       return b;
     })
   );
+  $('cost-alert').replaceChildren(
+    ...[0, 5, 10, 20, 50].map((v) => {
+      const b = document.createElement('button');
+      b.textContent = v ? `$${v}` : tr('set.costOff');
+      b.className = (config.costAlert || 0) === v ? 'on' : '';
+      b.onclick = () => update({ costAlert: v });
+      return b;
+    })
+  );
   $('quiet-now').hidden = !state.quietNow;
   $('quiet-now').textContent = tr('set.quietNow');
   // 打开了但有的快捷键被别的程序占了：说是哪个
@@ -551,7 +560,7 @@ function render() {
   if (changed('achievements', [state.achievements, state.config.color, state.level])) renderAchievements();
   if (changed('fishdex', [state.catches])) renderFishdex();
   if (changed('feed', [state.config.feed, state.config.feedHint, state.config.feedDir, state.lastBite])) renderFeed();
-  if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin, state.config.hotkeys, state.hotkeys, state.config.quietHours, state.config.quietFrom, state.config.quietTo, state.quietNow, state.config.breakReminder, state.config.breakMin])) renderPlay();
+  if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin, state.config.hotkeys, state.hotkeys, state.config.quietHours, state.config.quietFrom, state.config.quietTo, state.quietNow, state.config.breakReminder, state.config.breakMin, state.config.costAlert])) renderPlay();
   if (changed('updates', [state.update, state.config.autoUpdate])) renderUpdates();
   if (changed('pets', state.pets)) renderPets();
   if (changed('events', state.events)) renderEvents();

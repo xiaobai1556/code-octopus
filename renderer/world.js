@@ -1697,6 +1697,14 @@ if (host) {
     world.transfer(pet, to, { drag: d });
   });
   host.on('achievement', ({ ids, items, sessionId }) => world.messenger(sessionId).celebrateUnlock(ids, items));
+  // 花费提醒：今天花的钱超过了设的数
+  host.on('cost-alert', ({ spent, limit, sessionId }) => {
+    const pet = world.messenger(sessionId);
+    pet.touch();
+    pet.doEmote('oops', 1.6);
+    const usd = (v) => `$${v.toFixed(v < 10 ? 2 : 1)}`;
+    pet.say(tr('say.costAlert', { spent: usd(spent) }), 6, true, { sub: tr('say.costAlertSub', { limit: usd(limit) }) });
+  });
   // 插件里的 /octopus-party：撒彩纸
   host.on('party', () => {
     const pet = world.messenger();
