@@ -96,7 +96,21 @@ function askDetail(name = '', input = {}) {
   if (name === 'Bash' || name === 'PowerShell') return clip(String(input.command || ''), 400);
   if (input.file_path || input.notebook_path) return String(input.file_path || input.notebook_path);
   if (input.url) return clip(String(input.url), 200);
-  return describeTool(name, input);
+  // 其他工具（MCP 之类）：把参数都列出来，不然只看得到工具名，不知道它要对什么下手
+  const args = argsSummary(input);
+  return args ? clip(args, 400) : describeTool(name, input);
+}
+
+// { repo: 'prod', path: 'a b.txt', force: true } → repo=prod path="a b.txt" force=true
+// 带空格、引号、换行的值用 JSON 写法，换行之类的不会被折行"藏"起来
+function argsSummary(input) {
+  if (!input || typeof input !== 'object') return '';
+  return Object.entries(input)
+    .map(([k, v]) => {
+      const text = typeof v === 'string' ? (v === '' || /[\s"'\\]/.test(v) ? JSON.stringify(v) : v) : JSON.stringify(v);
+      return `${k}=${text}`;
+    })
+    .join(' ');
 }
 
 function toText(v) {

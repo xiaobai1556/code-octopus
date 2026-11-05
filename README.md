@@ -85,6 +85,22 @@ claude plugin install code-octopus@code-octopus
 
 只有权限请求（`PermissionRequest`）不一样：它是同步的 `http` hook，打到 `/permission`。异步 hook 返回的决定会被 Claude Code 忽略，所以"在桌宠上批准"只能这样做。没开这个功能时桌宠马上回空响应；桌宠没开时连不上，Claude Code 都照常在终端里问你。从旧版升级上来的，设置面板会提示"更新"：插件点「更新」（插件版本 0.3.0；0.3.0 起插件改名 `code-octopus`，装着旧的 `claude-pet` 插件的点一次「更新」会自动换成新的），settings.json 点「更新」重新接入一次。插件里的 `plugin/hooks/hooks.json` 由 `npm run build:plugin` 从 `src/hooks.js` 生成。
 
+## 卸载
+
+先在设置面板的「接入 Claude Code」里把插件卸掉、settings.json 断开，再到 Windows 的「设置 → 应用」里卸载。卸载程序不会动 `~/.claude`：不先断开的话，之后 Claude Code 每个事件都会白跑一次 curl（连不上，不影响 Claude Code 使用，只是多余）。
+
+已经先卸载了的话，手动清理插件：
+
+```bash
+claude plugin uninstall code-octopus@code-octopus --scope user
+```
+
+```bash
+claude plugin marketplace remove code-octopus
+```
+
+再打开 `~/.claude/settings.json`，删掉 `hooks` 里所有带 `claude-pet` 的项。旁边的 `settings.json.bak-claude-pet` 是最后一次接入或断开之前的样子，之后你自己改过的设置不在里面，别直接拿它覆盖。设置、统计、成就存在 `%APPDATA%\claude-pet`，不要了可以整个删掉。
+
 ## 设置面板
 
 - **小章鱼们**：每只对应哪个项目、正在干什么、上下文用了多少，可以跳回它的会话、让它睡觉或叫醒
@@ -107,7 +123,7 @@ claude plugin install code-octopus@code-octopus
 
 - `npm test`：跑 `test/` 里的单元测试（Node 自带的 `node:test`，不需要装别的，也不用启动 Electron）。覆盖事件解析和测试结果识别、hooks 的接入和移除、地形、节日和装扮、每日统计、上下文读取、喂文件、多语言文案是否齐全，以及插件的 `hooks.json` 有没有和 `src/hooks.js` 同步
 - `npm run demo`：启动后自动演示一遍所有反应
-- `curl http://127.0.0.1:23333/state`：查看每块屏（`screens`：工作区、缩放、通往隔壁屏的口子、点击范围、地形）、每只桌宠的状态和气泡（在哪块屏、穿什么）、每个会话对应的窗口和上下文占用（`sessions`）、已解锁的成就、更新状态、最近收到的事件、被去掉的重复事件数、鼠标按键记录（`captureLog`），以及最近几次拖窗口时的跟随统计（`drags` 是主进程扫描间隔，`screens[].renderer.stats.rides` 是桌宠收到位置和重画的间隔）
+- `curl http://127.0.0.1:23333/state`：查看每块屏（`screens`：工作区、缩放、通往隔壁屏的口子、点击范围、地形）、每只桌宠的状态和气泡（在哪块屏、穿什么）、每个会话对应的窗口和上下文占用（`sessions`）、已解锁的成就、更新状态、最近收到的事件、被去掉的重复事件数、鼠标按键记录（`captureLog`），最近几次拖窗口时的跟随统计（`drags` 是主进程扫描间隔，`screens[].renderer.stats.rides` 是桌宠收到位置和重画的间隔），以及出过的错：`errors` 是主进程的（定时循环、覆盖层崩溃，崩了的覆盖层会自动重新加载），`screens[].renderer.stats.frameErrors` / `lastFrameError` 是覆盖层主循环的（出错的那一帧跳过，动画接着跑）
 - 环境变量 `CLAUDE_PET_SPLIT=1`：把主屏假装成左右两块屏，没有第二块显示器也能试桌宠在屏幕之间转移
 - 端口被占用时可以用环境变量 `CLAUDE_PET_PORT` 换一个。只对 settings.json 方式有效（换完要重新接入一次），插件固定用 23333
 

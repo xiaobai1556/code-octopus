@@ -7,7 +7,7 @@ const SESSION_STALE = 45 * 60 * 1000;
 const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
 
-const stats = { renders: 0, ticks: 0, platformUpdates: 0, rideMoves: 0, mouseMoves: 0, pushes: 0, rides: [], input: [] };
+const stats = { renders: 0, ticks: 0, platformUpdates: 0, rideMoves: 0, mouseMoves: 0, pushes: 0, rides: [], input: [], frameErrors: 0, lastFrameError: '' };
 
 // [频率, 开始时间, 时长]
 const SOUNDS = {
@@ -1080,8 +1080,13 @@ function drawOrder() {
 
 // ---------- 主循环 ----------
 // Windows 上透明窗口每画一帧都要整屏回读再提交，代价不小，所以只在画面真的变了才重画：
-// 待着不动时只有眨眼、呼吸才画；走路限 20 帧；被拖着、在空中、有粒子、举牌子跳时 60 帧
+// 待着不动时只有眨眼、呼吸才画；走路限 20 帧；只有慢慢飘的粒子（睡觉的 z 之类）时 15 帧；
+// 被拖着、在空中、有彩纸之类的快粒子、举牌子跳时 60 帧
 //（高刷屏上 requestAnimationFrame 可能是 144/240Hz，不能每次都画）。
+// 模拟也一样：不拖着、不在空中、不被窗口带着走时，离上一次不到 12ms 就跳过，高刷屏上也只跑 60~80 次每秒
+const TICK_MIN_MS = 12;
+const SLOW_PARTICLES = new Set(['z', 'note', 'petal', 'leaf', 'flake', 'firefly']);
+const SLOW_DRAW_MS = 66;
 let last = performance.now();
 let lastDraw = 0;
 let lastSig = '';
@@ -1104,7 +1109,27 @@ function signature(poses, views) {
   return s;
 }
 
+// 某一帧里出了错（比如收到一个没想到的事件）也要接着排下一帧，不然动画就永远停了：
+// 小章鱼定在原地，主进程还拿着它最后的点击范围，屏幕上那一块一直吃掉你的点击
 function frame(now) {
+  try {
+    const hot = drag || now < world.ridingUntil || world.pets.some((p) => p.mode === 'drag' || !p.ground);
+    if (hot || now - last >= TICK_MIN_MS) tick(now);
+  } catch (err) {
+    noteFrameError(err);
+  } finally {
+    requestAnimationFrame(frame);
+  }
+}
+
+// 出过的错记在 stats 里（/state 能看到），控制台只打前几次
+function noteFrameError(err) {
+  stats.frameErrors++;
+  stats.lastFrameError = String((err && err.stack) || err).slice(0, 600);
+  if (stats.frameErrors <= 3) console.error('[code-octopus] frame error:', err);
+}
+
+function tick(now) {
   stats.ticks++;
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
@@ -1158,20 +1183,23 @@ function frame(now) {
   // 举着牌子的气泡在发光、或者正举着牌子蹦：按 60 帧画
   const glowing = [...views.values()].some((v) => v && (v.alert || v.celebrate));
   const dancing = world.music && world.pets.some((p) => p.mode === 'dance' || p.activity);
-  const fast = glowing || dancing || world.teaser.on || !!world.games.current || world.particles.length > 0 || world.pets.some((p) => !p.ground || p.mode === 'drag' || (p.activity && p.activity.kind === 'alert' && p.activity.urgent));
+  const lively = world.particles.some((q) => !SLOW_PARTICLES.has(q.kind)); // 彩纸、星星、爱心这些快的
+  const fast = glowing || dancing || world.teaser.on || !!world.games.current || lively || world.pets.some((p) => !p.ground || p.mode === 'drag' || (p.activity && p.activity.kind === 'alert' && p.activity.urgent));
+  // 只有慢慢飘的粒子：每帧都在动（签名里没有粒子），但 15 帧就够了。睡着时一直冒 z，按 60 帧画太浪费
+  const drifting = !fast && world.particles.length > 0;
   const walking = world.pets.some((p) => p.mode === 'walk' || p.mode === 'run');
   const riding = now < world.ridingUntil;
   // 被拖着、被扔在半空：跟着屏幕刷新率每帧都画（高刷屏上限 60 帧会一跳一跳的），画一帧不到 1ms
   const flying = world.pets.some((p) => p.mode === 'drag' || !p.ground);
-  if (now - lastDraw >= (riding || flying ? 0 : fast ? 15 : walking ? 50 : 33)) {
-    const sig = fast ? '' : signature(poses, views);
-    if (fast || sig !== lastSig) {
+  if (now - lastDraw >= (riding || flying ? 0 : fast ? 15 : walking ? 50 : drifting ? SLOW_DRAW_MS : 33)) {
+    const force = fast || drifting;
+    const sig = force ? '' : signature(poses, views);
+    if (force || sig !== lastSig) {
       lastSig = sig;
       lastDraw = now;
       render(poses, views);
     }
   }
-  requestAnimationFrame(frame);
 }
 
 // ---------- 鼠标：平时穿透，指到桌宠身上才接管 ----------

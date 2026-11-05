@@ -191,6 +191,10 @@ $('save').onclick = async () => {
 };
 
 load(new URLSearchParams(location.search).get('date') || undefined);
+// 窗口一直开着时，切回来就刷新一下：数字跟上；看的是"今天"的话，过了零点就换到新的一天
+window.addEventListener('focus', () => {
+  if (data) load(data.date === data.today ? undefined : data.date);
+});
 
 // ---------- 不在 Electron 里时的假数据，方便看界面 ----------
 function mockApi() {

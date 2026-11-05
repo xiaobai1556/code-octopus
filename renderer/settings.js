@@ -60,6 +60,29 @@ const itemPose = (outfit, extra) => ({ outfit, headroom: OUTFITS.headroom(outfit
 
 // ---------- 渲染 ----------
 
+// 读屏和键盘：开关、语言下拉框拿同一行里的文字当名字、小字说明当描述（不然读屏只念"开关，开"）
+function linkLabels() {
+  let n = 0;
+  for (const ctl of document.querySelectorAll('.row .switch, .row select')) {
+    const row = ctl.closest('.row');
+    const label = row.querySelector('.label');
+    if (!label) continue;
+    n++;
+    label.id = label.id || `label-${n}`;
+    ctl.setAttribute('aria-labelledby', label.id);
+    const hint = row.querySelector('small');
+    if (hint) {
+      hint.id = hint.id || `hint-${n}`;
+      ctl.setAttribute('aria-describedby', hint.id);
+    }
+  }
+}
+
+// 分段按钮、颜色、衣柜里的按钮：选中的是哪个
+function markPressed() {
+  for (const b of document.querySelectorAll('.seg button, #colors button, .items button:not(.peek)')) b.setAttribute('aria-pressed', String(b.classList.contains('on')));
+}
+
 function applyTexts() {
   document.documentElement.lang = I18N.lang();
   document.title = `${tr('app.name')} · ${tr('set.title')}`;
@@ -255,6 +278,7 @@ function renderWardrobe() {
           b.onclick = () => update({ outfit: { [slot]: item } });
         } else {
           b.className = 'locked';
+          b.setAttribute('aria-disabled', 'true');
           b.title = `${tr(`item.${item}`)} · ${tr('set.locked', { how: a ? tr(`ach.${a.id}Desc`) : '?' })}`;
         }
         items.append(b);
@@ -468,6 +492,7 @@ function render() {
   if (changed('events', state.events)) renderEvents();
   renderIntegration();
   $('autostart').setAttribute('aria-checked', String(!!state.autostart));
+  markPressed();
 }
 
 // ---------- 数据和操作 ----------
@@ -548,6 +573,7 @@ function focusSection(id) {
   el.classList.add('flash');
 }
 if (api.onFocusSection) api.onFocusSection(focusSection);
+linkLabels();
 
 refresh()
   .then(() => focusSection(location.hash.slice(1)))

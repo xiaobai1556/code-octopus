@@ -56,6 +56,16 @@ let reportWin = null;
 let stats = null;
 let feeder = null;
 const recentEvents = []; // 最近收到的事件，/state 和设置面板里能看到，方便排查 hooks 有没有接上
+// 主进程里出过的错（定时循环里、启动以后漏网的异常），/state 里能看到。控制台只打每处的前几次
+const recentErrors = [];
+const errorCounts = {};
+function noteError(where, err) {
+  errorCounts[where] = (errorCounts[where] || 0) + 1;
+  recentErrors.push({ at: new Date().toISOString(), where, count: errorCounts[where], message: String((err && err.stack) || err).slice(0, 600) });
+  if (recentErrors.length > 20) recentErrors.shift();
+  if (errorCounts[where] <= 3) console.error(`[code-octopus] ${where}:`, err);
+}
+let quitting = false;
 
 const configPath = () => path.join(app.getPath('userData'), 'config.json');
 
@@ -173,8 +183,8 @@ function createOverlay(d) {
   // 不用 { forward: true }：它在本进程装一个全局底层鼠标钩子，高回报率鼠标每秒上千个事件都要先经过这里，
   // 会把主进程的定时器饿死（拖窗口时扫描停顿几百毫秒），还可能拖慢系统鼠标。改为 pollMouse 主动读光标位置。
   win.setIgnoreMouseEvents(true);
-  // 每个覆盖层里的桌宠编号从不同的数开始，转移到别的屏幕以后编号也不会撞
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'), { query: { base: String(o.seq * 100000) } });
+  loadOverlayPage(o);
+  win.webContents.on('render-process-gone', (_e, details) => onOverlayGone(o, details));
   win.once('ready-to-show', () => {
     win.showInactive();
     win.setBounds(o.area); // 缩放不一样的副屏上，创建时给的尺寸可能被按主屏缩放算错，显示后再设一次
@@ -183,6 +193,34 @@ function createOverlay(d) {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   o.hwnd = Number(win.getNativeWindowHandle().readBigUInt64LE(0));
   return o;
+}
+
+// 每个覆盖层里的桌宠编号从不同的数开始，转移到别的屏幕以后编号也不会撞
+function loadOverlayPage(o) {
+  o.win.loadFile(path.join(__dirname, 'renderer', 'index.html'), { query: { base: String(o.seq * 100000) } });
+}
+
+// 覆盖层的渲染进程崩了（或者被系统杀掉）：它最后发来的点击范围还在，屏幕上那块地方会一直吃掉点击，
+// 桌宠也不会再出现。清掉点击范围、恢复穿透、交还它手上等批准的请求，过一会儿重新加载（连着崩就等久一点）
+function onOverlayGone(o, details) {
+  logMouse('renderer-gone', o, { reason: details && details.reason });
+  noteError('renderer-gone', new Error(`screen ${o.id}: ${details && details.reason}`));
+  o.ready = false;
+  o.hitboxes = [];
+  o.captured = false;
+  o.crashes = (o.crashes || 0) + 1;
+  if (dragOverlay === o) {
+    petDragging = false;
+    dragOverlay = null;
+  }
+  for (const a of [...asks.values()]) if (a.target === o) settleAsk(a.id, null, 'crashed');
+  if (quitting || o.win.isDestroyed() || overlays.get(o.id) !== o) return;
+  o.win.setIgnoreMouseEvents(true);
+  o.seq = ++overlaySeq; // 换个编号起点：崩之前转移到别的屏上的桌宠还用着旧编号
+  const delay = Math.min(30000, 1000 * 2 ** Math.min(5, o.crashes - 1));
+  setTimeout(() => {
+    if (!quitting && !o.win.isDestroyed() && overlays.get(o.id) === o) loadOverlayPage(o);
+  }, delay);
 }
 
 function updateOverlay(o, d) {
@@ -361,8 +399,13 @@ function pollMouse() {
   }
 }
 
+// 两个定时循环都是做完一次再排下一次：中间出一次错也要接着排，不然就永远停了（读不到鼠标 = 再也点不动它）
 function mouseLoop() {
-  pollMouse();
+  try {
+    pollMouse();
+  } catch (err) {
+    noteError('mouse', err);
+  }
   setTimeout(mouseLoop, petDragging ? DRAG_POLL_MS : CURSOR_POLL_MS);
 }
 
@@ -489,13 +532,17 @@ let lastDrag = null;
 
 function scanLoop() {
   clearTimeout(scanTimer);
-  if (userDragging && lastDrag) {
-    const now = performance.now();
-    if (lastDrag.lastScan) lastDrag.maxScanGapMs = Math.max(lastDrag.maxScanGapMs, Math.round(now - lastDrag.lastScan));
-    lastDrag.lastScan = now;
-    lastDrag.scans++;
+  try {
+    if (userDragging && lastDrag) {
+      const now = performance.now();
+      if (lastDrag.lastScan) lastDrag.maxScanGapMs = Math.max(lastDrag.maxScanGapMs, Math.round(now - lastDrag.lastScan));
+      lastDrag.lastScan = now;
+      lastDrag.scans++;
+    }
+    scanPlatforms();
+  } catch (err) {
+    noteError('scan', err);
   }
-  scanPlatforms();
   // 拖桌宠时也保持 1ms 系统定时器，几毫秒一次的鼠标轮询才做得到
   const hot = userDragging || petDragging || Date.now() < hotUntil;
   setHighResTimer(hot);
@@ -981,7 +1028,7 @@ function startServer() {
           const state = {
             screens, pets, petDragging, dragOverlay: dragOverlay && dragOverlay.id, externalDrag, lastPressAt, buttons, captureLog, userDragging, drags, duplicatesDropped, userAway, locale: locale(),
             sessions: [...sessions].map(([id, s]) => ({ id, hwnd: s.hwnd, exe: s.exe, used: s.used, limit: contextLimit(s), costUSD: s.costUSD, screen: sessionOverlay.get(id) })),
-            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents,
+            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents, errors: recentErrors,
           };
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(state));
@@ -1086,9 +1133,15 @@ function checkHunger() {
   sendTo(cursorOverlay(), 'hungry', { count: n });
 }
 
+// 打不开（比如"肚子"放在拔掉的 U 盘上）就告诉你，不要让异常一路冒到 Electron 的报错框
 function openFolder(dir) {
-  fs.mkdirSync(dir, { recursive: true });
-  shell.openPath(dir);
+  const fail = (msg) => dialog.showMessageBox({ type: 'warning', title: tr('app.name'), message: tr('err.openFolder', { dir }), detail: String(msg || '') });
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    return fail(err.message);
+  }
+  shell.openPath(dir).then((msg) => msg && fail(msg));
 }
 
 // ---------- 新手引导 ----------
@@ -1460,8 +1513,13 @@ if (!app.requestSingleInstanceLock()) {
     screen.on('display-metrics-changed', onDisplaysChanged);
     screen.on('display-added', onDisplaysChanged);
     screen.on('display-removed', onDisplaysChanged);
+    // 启动完以后，定时器、事件回调里漏网的异常只记下来，不弹 Electron 的报错框：
+    // setInterval 里的错每次都会再来一遍，一直弹框比出错本身还烦。启动时的错还是照常弹出来
+    process.on('uncaughtException', (err) => noteError('uncaught', err));
+    process.on('unhandledRejection', (err) => noteError('rejection', err));
   });
   // 再启动一次：带 --settings 就打开设置面板，否则把桌宠叫到屏幕中间
   app.on('second-instance', (_e, argv) => (argv.includes('--settings') ? openSettings() : summon()));
+  app.on('before-quit', () => (quitting = true));
   app.on('window-all-closed', () => app.quit());
 }

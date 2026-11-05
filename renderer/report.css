@@ -318,3 +318,10 @@ footer {
   color: var(--muted);
   text-align: center;
 }
+
+/* 用键盘操作时看得出焦点在哪（鼠标点的时候不显示） */
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

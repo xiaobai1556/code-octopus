@@ -98,6 +98,16 @@ test('askDetail：截掉了就在末尾留省略号（桌宠那边靠它不给�
   assert.equal(askDetail('Write', { file_path: 'C:\\a\\b.txt' }), 'C:\\a\\b.txt');
 });
 
+test('askDetail：MCP 之类的工具把参数列出来，不只给个工具名', () => {
+  assert.equal(askDetail('mcp__github__delete_file', { owner: 'me', repo: 'prod', path: 'config/secrets.yml' }), 'owner=me repo=prod path=config/secrets.yml');
+  // 带空格、换行的值用 JSON 写法，换行不会被折行藏起来
+  assert.equal(askDetail('mcp__db__query', { sql: 'DROP TABLE users;\n--', dry: false }), 'sql="DROP TABLE users;\\n--" dry=false');
+  assert.equal(askDetail('mcp__x__ping', {}), 'ping');
+  const long = askDetail('mcp__x__put', { body: 'y'.repeat(1000) });
+  assert.equal(long.length, 400);
+  assert.ok(long.endsWith('…'));
+});
+
 test('salvage：截断的请求体至少捞出事件名、会话和工具', () => {
   const ev = salvage('{"session_id":"abc","hook_event_name":"PreToolUse","cwd":"/x/proj","tool_name":"Bash","tool_input":{"command":"aaa');
   assert.equal(ev.event, 'PreToolUse');

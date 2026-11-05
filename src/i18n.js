@@ -69,6 +69,7 @@
       'menu.sleep': '让它睡一会儿',
 
       'err.port': '端口 {port} 被占用了，桌宠收不到 Claude Code 的事件。',
+      'err.openFolder': '打不开文件夹：{dir}',
       'err.settingsJson': '{file} 不是合法的 JSON，为了安全没有做任何改动。',
       'err.noCli': '找不到 claude 命令。请确认 Claude Code 已安装，并且在命令行里能运行 claude。',
 
@@ -490,6 +491,7 @@
       'menu.sleep': '讓牠睡一下',
 
       'err.port': '連接埠 {port} 被佔用了，桌寵收不到 Claude Code 的事件。',
+      'err.openFolder': '打不開資料夾：{dir}',
       'err.settingsJson': '{file} 不是合法的 JSON，為了安全沒有做任何修改。',
       'err.noCli': '找不到 claude 指令。請確認已安裝 Claude Code，並且能在命令列執行 claude。',
 
@@ -911,6 +913,7 @@
       'menu.sleep': 'Take a nap',
 
       'err.port': "Port {port} is already in use, so the pet can't receive Claude Code events.",
+      'err.openFolder': "Couldn't open the folder: {dir}",
       'err.settingsJson': '{file} is not valid JSON, so nothing was changed.',
       'err.noCli': "Couldn't find the claude command. Make sure Claude Code is installed and claude runs in a terminal.",
 
@@ -1332,6 +1335,7 @@
       'menu.sleep': 'ひと休みさせる',
 
       'err.port': 'ポート {port} が使用中のため、Claude Code のイベントを受け取れません。',
+      'err.openFolder': 'フォルダーを開けませんでした：{dir}',
       'err.settingsJson': '{file} が正しい JSON ではないため、何も変更していません。',
       'err.noCli': 'claude コマンドが見つかりません。Claude Code がインストールされ、ターミナルで claude が動くか確認してください。',
 
