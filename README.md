@@ -1,5 +1,7 @@
 # Code Octopus 代码小章鱼
 
+**简体中文** · [English](README.en.md)
+
 给 Claude Code 用的像素风桌宠（Windows）。
 
 ![代码小章鱼演示](docs/demo.gif)
