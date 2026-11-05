@@ -18,6 +18,7 @@ const { Feeder, looseFiles } = require('./src/feed');
 const updater = require('./src/updater');
 const I18N = require('./src/i18n');
 const { trayIcon } = require('./src/icon');
+const { writeJsonAtomic } = require('./src/jsonfile');
 
 const tr = I18N.t;
 const PORT = Number(process.env.CLAUDE_PET_PORT) || 23333;
@@ -74,8 +75,7 @@ function loadConfig() {
 
 function saveConfig() {
   try {
-    fs.mkdirSync(path.dirname(configPath()), { recursive: true });
-    fs.writeFileSync(configPath(), JSON.stringify(config, null, 2));
+    writeJsonAtomic(configPath(), config, true);
   } catch {}
 }
 
@@ -707,8 +707,9 @@ function onPermissionRequest(req, res, text) {
   } catch {}
   const ev = raw && summarize(raw);
   const info = ev && sessions.get(ev.sessionId);
-  // 你正看着那个会话的窗口：交给终端
-  if (!ev || !info || !config.approveOnPet || (info.hwnd && foregroundWindow() === info.hwnd)) return reply(res, null);
+  // 你正看着那个会话的窗口：交给终端。找不到会话窗口时也交给终端：没法知道你是不是正看着终端，
+  // 扣住请求的话，终端里的 Claude 会一直卡着，切回窗口也不会放行
+  if (!ev || !info || !config.approveOnPet || !info.hwnd || foregroundWindow() === info.hwnd) return reply(res, null);
   const hash = crypto.createHash('sha1').update(text).digest('hex');
   let ask = [...asks.values()].find((a) => a.hash === hash);
   if (!ask) {
@@ -802,7 +803,7 @@ function loadNotes() {
 
 function saveNotes() {
   try {
-    fs.writeFileSync(notesPath(), JSON.stringify(notes, null, 2));
+    writeJsonAtomic(notesPath(), notes, true);
   } catch {}
   broadcast('notes', notes);
 }
@@ -913,10 +914,15 @@ function petStates(expr) {
   );
 }
 
+// 只认按本机地址连进来的请求。DNS 重绑定时网页用的是它自己的域名（Host 头对不上），
+// 而同源 GET 不带 Origin，光拦 Origin 拦不住它读 /state
+const LOCAL_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
+const localHost = (host) => !host || LOCAL_HOSTS.has(String(host).toLowerCase());
+
 function startServer() {
   const server = http.createServer((req, res) => {
     // 浏览器里的网页会带 Origin，直接拒绝，只接受本机命令行（curl）发来的事件
-    if (req.headers.origin) {
+    if (req.headers.origin || !localHost(req.headers.host)) {
       res.writeHead(403);
       res.end();
       return;
@@ -1329,7 +1335,8 @@ function registerReportIpc() {
   ipcMain.handle('report:save', async (_e, rect, date) => {
     const dir = path.join(app.getPath('pictures'), 'Code Octopus');
     fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, `claude-pet-${date || dayKey()}.png`);
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : dayKey();
+    const file = path.join(dir, `code-octopus-${day}.png`);
     fs.writeFileSync(file, (await capture(rect)).toPNG());
     shell.showItemInFolder(file);
     return file;
@@ -1409,7 +1416,9 @@ let pendingUnlocks = []; // 启动时按以前的记录补解锁的成就，等�
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.setAppUserModelId('claude-pet');
+  // 要和 electron-builder.config.js 里的 appId 一样：安装包建的快捷方式用的是 appId，
+  // 不一样的话任务栏会把运行中的窗口和固定的图标当成两个程序（数据目录为了老用户留着旧名字，这个不用）
+  app.setAppUserModelId('io.github.code-octopus');
   app.whenReady().then(() => {
     loadConfig();
     I18N.setLang(locale());

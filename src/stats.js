@@ -1,6 +1,6 @@
 // 按天统计陪 Claude 干了多少活，给"每日小结"用。只存在本机 userData/stats.json 里。
 const fs = require('fs');
-const path = require('path');
+const { writeJsonAtomic } = require('./jsonfile');
 
 const KEEP_DAYS = 90;
 const MAX_TURN_MS = 3 * 60 * 60 * 1000; // 一轮最多算 3 小时，防止忘了关的会话把时长撑爆
@@ -211,10 +211,7 @@ class Stats {
     const sessions = Object.keys(this.data.lastCost);
     for (const s of sessions.slice(0, Math.max(0, sessions.length - 200))) delete this.data.lastCost[s];
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      const tmp = this.file + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(this.data));
-      fs.renameSync(tmp, this.file);
+      writeJsonAtomic(this.file, this.data);
     } catch {}
   }
 }

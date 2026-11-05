@@ -8,6 +8,7 @@
     "start": "electron .",
     "demo": "electron . --demo",
     "settings": "electron . --settings",
+    "test": "node --test",
     "build:plugin": "node scripts/build-plugin.js",
     "build:icon": "node scripts/make-icon.js",
     "pack": "node scripts/make-icon.js && electron-builder --config electron-builder.config.js --win --dir",

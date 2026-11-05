@@ -89,11 +89,13 @@ function taskChange(e, name, input = {}, response) {
   return null;
 }
 
-// 在桌宠上批准时显示的内容：命令尽量完整
+// 在桌宠上批准时显示的内容：命令尽量完整。截掉了就在末尾留个"…"，
+// 桌宠那边看到显示不全就不给「允许」（危险的部分可能正好在被截掉的那一段）
+const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 function askDetail(name = '', input = {}) {
-  if (name === 'Bash' || name === 'PowerShell') return String(input.command || '').slice(0, 400);
+  if (name === 'Bash' || name === 'PowerShell') return clip(String(input.command || ''), 400);
   if (input.file_path || input.notebook_path) return String(input.file_path || input.notebook_path);
-  if (input.url) return String(input.url).slice(0, 200);
+  if (input.url) return clip(String(input.url), 200);
   return describeTool(name, input);
 }
 
@@ -108,15 +110,44 @@ function toText(v) {
   return String(v);
 }
 
-const TEST_CMD = /\b(test|tests|jest|vitest|pytest|mocha|ava|go test|cargo test|ctest|phpunit|rspec)\b/i;
+// 是不是在跑测试：只看每一段命令（&& ; | 隔开）开头的程序，不看命令里随便哪儿出现的 test，
+// 否则 cat test/x.json、ls tests 这种也会被当成测试，输出里有个 ok 就撒彩纸
+const RUN_PREFIX = /^(?:\(\s*|(?:sudo|time|env|npx|bunx|pnpx|uv\s+run|poetry\s+run|pipenv\s+run|bundle\s+exec|pnpm\s+(?:exec|dlx)|yarn\s+dlx)\s+|[A-Za-z_]\w*=\S*\s+)/i;
+const TEST_HEADS = [
+  /^(?:npm|pnpm|yarn|bun)(?:\.cmd)?\s+(?:run(?:-script)?\s+)?(?:t|test)(?:[:\s]|$)/i, // npm test、npm t、yarn test:unit
+  /^(?:npm|pnpm|yarn|bun)(?:\.cmd)?\s+run(?:-script)?\s+[\w:.-]*test[\w:.-]*(?:\s|$)/i, // npm run test:e2e、npm run unit-test
+  /^(?:yarn|pnpm|bun)\s+(?:jest|vitest|mocha|ava|playwright\s+test)\b/i,
+  /^(?:\S*[\\/])?(?:jest|vitest|mocha|ava|tap|pytest|py\.test|tox|nox|rspec|phpunit|ctest|karma)(?:\.cmd|\.exe)?(?:\s|$)/i, // 也认 vendor/bin/phpunit、node_modules/.bin/jest
+  /^(?:playwright|cypress)\s+(?:test|run)\b/i,
+  /^(?:go|deno|bun|dotnet|swift|zig|mix|flutter|dart)\s+test\b/i,
+  /^cargo\s+(?:test|nextest)\b/i,
+  /^node\s+(?:\S+\s+)*--test\b/i,
+  /^python[\d.]*\s+-m\s+(?:pytest|unittest)\b/i,
+  /^(?:\.[\\/])?(?:mvnw?|gradlew?)(?:\.cmd|\.bat)?\s+(?:\S+\s+)*(?:test|check|verify)\b/i,
+  /^make\s+(?:\S+\s+)*(?:test|check)\b/i,
+];
+
+function isTestCommand(cmd) {
+  return String(cmd || '')
+    .split(/&&|\|\||[;|\n]/)
+    .some((seg) => {
+      let s = seg.trim().replace(/\)+$/, '').trim(); // (cd app && npm test) 的右括号
+      for (let prev = ''; prev !== s; ) {
+        prev = s;
+        s = s.replace(RUN_PREFIX, '');
+      }
+      return TEST_HEADS.some((re) => re.test(s));
+    });
+}
 
 function testOutcome(ev, failed) {
   const cmd = ev.tool_input && ev.tool_input.command;
-  if (!cmd || !TEST_CMD.test(cmd)) return null;
+  if (!isTestCommand(cmd)) return null;
   if (failed) return 'fail';
   const text = toText(ev.tool_result ?? ev.tool_response);
-  if (/\b[1-9]\d*\s+(failed|failing|failures?)\b/i.test(text) || /^\s*FAIL\b/m.test(text)) return 'fail';
-  if (/\b(passed|passing)\b|\bok\b|✓/i.test(text)) return 'pass';
+  // 各家的失败写法：3 failed / 2 failing、行首 FAIL / FAILED、node --test 和 TAP 的 "# fail 1"
+  if (/\b[1-9]\d*\s+(failed|failing|failures?)\b/i.test(text) || /^\s*FAIL(?:ED)?\b/m.test(text) || /^#\s*fail\s+[1-9]/im.test(text)) return 'fail';
+  if (/\b(passed|passing)\b|\bok\b|✓/i.test(text) || /^#\s*pass\s+[1-9]/im.test(text)) return 'pass';
   return null;
 }
 
@@ -205,4 +236,4 @@ function salvage(text) {
   return summarize({ hook_event_name: name, session_id: pick('session_id'), cwd: pick('cwd'), tool_name: pick('tool_name') });
 }
 
-module.exports = { summarize, salvage, toolKind, askDetail };
+module.exports = { summarize, salvage, toolKind, askDetail, isTestCommand };

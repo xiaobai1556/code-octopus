@@ -268,7 +268,7 @@ const world = {
     if (!this.timeOfDay) return 'day';
     const h = d.getHours() + d.getMinutes() / 60;
     if (h >= 1 && h < 5) return 'late';
-    if (h >= 22 || h < 1 || h < 6) return 'night';
+    if (h >= 22 || h < 6) return 'night';
     if (h < 9.5) return 'morning';
     return 'day';
   },
@@ -380,7 +380,7 @@ const world = {
       return tr(pomo.phase === 'focus' ? 'pomo.focusLeft' : 'pomo.breakLeft', { t: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` });
     }
     const notes = this.noteHolder() === pet ? this.myNotes() : [];
-    if (notes.length) return `${tr('note.label', { n: notes.length })}：${notes[notes.length - 1].text}`;
+    if (notes.length) return `${tr('note.label', { n: notes.length })}${tr('punct.colon')}${notes[notes.length - 1].text}`;
     return '';
   },
 
@@ -658,7 +658,22 @@ resize();
 
 // ---------- 气泡（Claude 风格：米白圆角、转圈的星星、字幕会折行和逐字出现） ----------
 const BUBBLE = { bg: '#FBF8F3', alertBg: '#FFF4EC', greenBg: '#F1FAF3', border: '#E4D9C9', ink: '#2B2620', muted: '#857869', accent: '#D97757', green: '#3F9A5B' };
-const UI_FONT = '"Segoe UI","Microsoft YaHei UI","Yu Gothic UI","PingFang SC",sans-serif';
+// 汉字按语言挑字体：中日文共用的汉字在不同字体里字形不一样，日文要用日文字体、繁体要用繁体字体
+const CJK_FONTS = {
+  'zh-CN': '"Microsoft YaHei UI","PingFang SC"',
+  'zh-TW': '"Microsoft JhengHei UI","PingFang TC"',
+  ja: '"Yu Gothic UI","Meiryo UI","Hiragino Sans"',
+  en: '"Microsoft YaHei UI","Yu Gothic UI","PingFang SC"',
+};
+let UI_FONT = '';
+let MONO_FONT = '';
+function setFonts(lang) {
+  const cjk = CJK_FONTS[lang] || CJK_FONTS.en;
+  UI_FONT = `"Segoe UI",${cjk},sans-serif`;
+  MONO_FONT = `"Cascadia Mono",Consolas,${cjk},monospace`;
+  document.documentElement.lang = lang;
+}
+setFonts(I18N.lang());
 const CJK = '\\u2e80-\\u9fff\\uac00-\\ud7af\\uf900-\\ufaff\\uff00-\\uffef\\u3000-\\u303f';
 const TOKEN = new RegExp(`[${CJK}]|\\s+|[^\\s${CJK}]+`, 'g');
 const wrapCache = new Map();
@@ -689,8 +704,11 @@ function wrapLines(text, maxW, maxLines) {
   }
   if (line.trim()) lines.push(line.trimEnd());
   let out = lines;
+  // truncated：放不下、末尾加了省略号（批准气泡靠它判断命令有没有显示全）
+  out.truncated = lines.length > maxLines;
   if (lines.length > maxLines) {
     out = lines.slice(0, maxLines);
+    out.truncated = true;
     let tail = out[maxLines - 1];
     while (tail && ctx.measureText(tail + '…').width > maxW) tail = tail.slice(0, -1);
     out[maxLines - 1] = tail + '…';
@@ -699,6 +717,11 @@ function wrapLines(text, maxW, maxLines) {
   wrapCache.set(key, out);
   return out;
 }
+
+// 批准按钮停稳多久才能点、挪动多少算"挪了地方"（DIP）
+const BUTTON_ARM_MS = 700;
+const BUTTON_DRIFT = 4;
+const buttonsArmed = (pet) => !!pet.buttonAnchor && performance.now() - pet.buttonAnchor.at >= BUTTON_ARM_MS;
 
 // th < 0：尾巴画在上边、朝上指（气泡放在桌宠下面时）
 function bubblePath(x, y, w, h, r, tx, tw, th) {
@@ -729,7 +752,7 @@ function drawBubble(pet, v) {
   const dpr = world.dpr;
   const S = (n) => Math.round(n * dpr);
   const titleFont = `${v.important ? 700 : 600} ${S(13)}px ${UI_FONT}`;
-  const subFont = v.code ? `${S(12)}px "Cascadia Mono",Consolas,"Microsoft YaHei UI",monospace` : `${S(12)}px ${UI_FONT}`;
+  const subFont = v.code ? `${S(12)}px ${MONO_FONT}` : `${S(12)}px ${UI_FONT}`;
   const metaFont = `${S(12)}px ${UI_FONT}`;
   const glyphFont = `${S(14)}px "Segoe UI Symbol","Segoe UI",sans-serif`;
   const padX = S(10);
@@ -739,7 +762,6 @@ function drawBubble(pet, v) {
   const glow = v.alert || v.celebrate; // 举牌子时的气泡：橙色（等你决定）或绿色（做完了 / 日报）发光
   const accent = v.celebrate ? BUBBLE.green : BUBBLE.accent;
   const hintFont = `600 ${S(11)}px ${UI_FONT}`;
-  const hintH = v.hint ? S(17) : 0;
   const maxW = S(glow ? 290 : 250);
 
   ctx.font = glyphFont;
@@ -755,23 +777,31 @@ function drawBubble(pet, v) {
   ctx.font = subFont;
   const subLines = sub ? wrapLines(sub, maxW, v.subLines || 3) : [];
   for (const l of subLines) w = Math.max(w, ctx.measureText(l).width);
-  if (v.hint) {
+  // 在桌宠上批准：要批准的内容显示不全（危险的部分可能正好在省略号后面）就不给「允许」，让你去终端看完整的
+  let buttons = v.buttons;
+  let hint = v.hint;
+  if (buttons && (subLines.truncated || v.askClipped)) {
+    buttons = buttons.filter(([key]) => key !== 'allow');
+    hint = tr('ask.tooLong');
+  }
+  const hintH = hint ? S(17) : 0;
+  if (hint) {
     ctx.font = hintFont;
-    w = Math.max(w, ctx.measureText(`↩ ${v.hint}`).width);
+    w = Math.max(w, ctx.measureText(`↩ ${hint}`).width);
   }
   // 一排按钮（在桌宠上批准：允许 / 拒绝 / 去终端）
   const btnFont = `600 ${S(12)}px ${UI_FONT}`;
   const btnH = S(24);
   const btnGap = S(6);
   let btnW = [];
-  if (v.buttons) {
+  if (buttons) {
     ctx.font = btnFont;
-    btnW = v.buttons.map(([, label]) => Math.ceil(ctx.measureText(label).width) + S(22));
+    btnW = buttons.map(([, label]) => Math.ceil(ctx.measureText(label).width) + S(22));
     w = Math.max(w, btnW.reduce((a, b) => a + b, 0) + btnGap * (btnW.length - 1));
   }
 
   w = Math.ceil(w) + padX * 2;
-  const btnRowH = v.buttons ? S(8) + btnH : 0;
+  const btnRowH = buttons ? S(8) + btnH : 0;
   const h = padY * 2 + titleLines.length * lineH + (subLines.length ? S(2) + subLines.length * subH : 0) + hintH + btnRowH;
   const tailW = S(6);
   const tailH = S(7);
@@ -780,7 +810,7 @@ function drawBubble(pet, v) {
   const jumping = a && ((a.kind === 'alert' && a.urgent) || a.kind === 'done') ? 38 : 0;
   const head = pet.y - pet.height - pet.overhead() - jumping;
   // 带按钮的气泡不跟着左右晃，按钮才点得准
-  const cx = Math.round((pet.x + (v.buttons ? 0 : pet.lastSway || 0)) * dpr);
+  const cx = Math.round((pet.x + (buttons ? 0 : pet.lastSway || 0)) * dpr);
   const x = clamp(Math.round(cx - w / 2), S(4), canvas.width - w - S(4));
   // 头顶放不下（站在贴着屏幕顶的窗口上）：放到脚下面，免得盖住举着的牌子
   const above = Math.round((head - 8) * dpr) - h - tailH;
@@ -788,7 +818,7 @@ function drawBubble(pet, v) {
   const y = below ? Math.min(canvas.height - h - S(4), Math.round((pet.y + 6) * dpr) + tailH) : above;
   const tx = clamp(cx, x + S(9) + tailW, x + w - S(9) - tailW);
   // 气泡占的地方（DIP）：鼠标靠近带按钮的气泡时，桌宠停下来等你点
-  pet.bubbleBox = v.buttons ? { l: x / dpr, t: y / dpr, r: (x + w) / dpr, b: (y + h) / dpr } : null;
+  pet.bubbleBox = buttons ? { l: x / dpr, t: y / dpr, r: (x + w) / dpr, b: (y + h) / dpr } : null;
 
   ctx.save();
   ctx.globalAlpha = v.alpha;
@@ -836,22 +866,32 @@ function drawBubble(pet, v) {
   }
 
   // 最后一行小字提示：点我回到会话
-  if (v.hint) {
+  if (hint) {
     ctx.font = hintFont;
     ctx.fillStyle = accent;
-    ctx.fillText(`↩ ${v.hint}`, x + padX, y + h - padY - btnRowH - hintH / 2);
+    ctx.fillText(`↩ ${hint}`, x + padX, y + h - padY - btnRowH - hintH / 2);
   }
 
   // 按钮：记下位置（DIP），点击范围和主进程的穿透判断都要用
   pet.buttonRects = null;
-  if (v.buttons) {
+  if (!buttons) pet.buttonAnchor = null;
+  if (buttons) {
     pet.buttonRects = [];
     let bx = x + padX;
     const by = y + h - padY - btnH;
+    // 防误触：按钮出现（或者挪了地方、换了一个请求）以后要停稳一会儿才能点，
+    // 免得它蹦到你正要点的地方，你本来点别处的那一下就成了「允许」。没停稳时按钮画得淡一些
+    const anchor = pet.buttonAnchor;
+    const askId = pet.ask ? pet.ask.id : 0;
+    if (!anchor || anchor.askId !== askId || Math.abs(anchor.x - bx / dpr) > BUTTON_DRIFT || Math.abs(anchor.y - by / dpr) > BUTTON_DRIFT) {
+      pet.buttonAnchor = { askId, x: bx / dpr, y: by / dpr, at: performance.now() };
+    }
+    const armed = buttonsArmed(pet);
+    ctx.globalAlpha = v.alpha * (armed ? 1 : 0.45);
     ctx.font = btnFont;
-    v.buttons.forEach(([key, label], i) => {
+    buttons.forEach(([key, label], i) => {
       const bw = btnW[i];
-      const hot = world.hoverButton && world.hoverButton.pet === pet && world.hoverButton.key === key;
+      const hot = armed && world.hoverButton && world.hoverButton.pet === pet && world.hoverButton.key === key;
       const style = key === 'allow' ? { fill: hot ? '#4CAF6A' : BUBBLE.green, ink: '#FFFFFF', line: BUBBLE.green } : key === 'deny' ? { fill: hot ? '#FBE3DF' : '#FFFFFF', ink: '#B4372A', line: '#E3A69C' } : { fill: hot ? '#F1ECE4' : '#FFFFFF', ink: BUBBLE.ink, line: BUBBLE.border };
       ctx.beginPath();
       ctx.roundRect(bx, by, bw, btnH, btnH / 2);
@@ -878,7 +918,7 @@ function drawCard(pet, v) {
   const titleFont = `700 ${S(13)}px ${UI_FONT}`;
   const rowFont = `${S(12)}px ${UI_FONT}`;
   const metaFont = `${S(11.5)}px ${UI_FONT}`;
-  const codeFont = `${S(11.5)}px "Cascadia Mono",Consolas,"Microsoft YaHei UI",monospace`;
+  const codeFont = `${S(11.5)}px ${MONO_FONT}`;
   const iconFont = `700 ${S(12)}px "Segoe UI Symbol","Segoe UI",sans-serif`;
   const padX = S(12);
   const padY = S(9);
@@ -962,7 +1002,7 @@ function drawCard(pet, v) {
     ty += S(17);
   });
   ctx.restore();
-  pet.buttonRects = null;
+  pet.buttonRects = pet.buttonAnchor = null;
 }
 
 function measureWith(font, text) {
@@ -1022,7 +1062,7 @@ function render(poses, views) {
 
   for (const pet of world.pets) {
     const v = views.get(pet);
-    if (!v) pet.buttonRects = pet.bubbleBox = null;
+    if (!v) pet.buttonRects = pet.bubbleBox = pet.buttonAnchor = null;
     else if (v.card) drawCard(pet, v);
     else drawBubble(pet, v);
   }
@@ -1187,6 +1227,11 @@ function buttonAt(x, y) {
 
 function pressStart(x, y, t) {
   const btn = buttonAt(x, y);
+  if (btn && !buttonsArmed(btn.pet)) {
+    // 按钮刚出现、还没停稳：这一下不算，也不当成抓桌宠
+    logInput('press-button-early', { clientX: x, clientY: y }, { pet: btn.pet.id, key: btn.key });
+    return true;
+  }
   if (btn) {
     logInput('press-button', { clientX: x, clientY: y }, { pet: btn.pet.id, key: btn.key });
     drag = { button: btn, pet: btn.pet, sx: x, sy: y, ox: 0, oy: 0, moved: false, hist: [], t0: t, at: performance.now() };
@@ -1343,7 +1388,7 @@ let demoTimers = [];
 function runDemo() {
   demoTimers.forEach(clearTimeout);
   const sid = 'demo-' + Date.now();
-  const e = (event, extra = {}) => ({ event, sessionId: sid, project: 'claude-pet', ...extra });
+  const e = (event, extra = {}) => ({ event, sessionId: sid, project: 'code-octopus', ...extra });
   const steps = [
     [0, e('SessionStart', { model: 'claude-opus-5-5' })],
     [1800, e('UserPromptSubmit', { text: tr('demo.prompt') })],
@@ -1418,7 +1463,10 @@ if (host) {
     world.collide = c.collide !== false;
     world.soundOn = c.sound !== false;
     if (!world.collide) for (const p of world.pets) p.inside.clear();
-    if (c.locale) I18N.setLang(c.locale);
+    if (c.locale) {
+      I18N.setLang(c.locale);
+      setFonts(I18N.lang());
+    }
     world.setHomeColor(c.color || 0);
   });
   host.on('pet-command', (data) => {
@@ -1527,6 +1575,7 @@ if (host) {
 } else {
   document.body.classList.add('preview');
   I18N.setLang(I18N.detect(navigator.languages));
+  setFonts(I18N.lang());
   world.setPlatforms(previewPlatforms(), previewWindows);
   if (location.search.includes('demo')) setTimeout(runDemo, 800);
 }

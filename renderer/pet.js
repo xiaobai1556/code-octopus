@@ -270,7 +270,8 @@ class Pet {
 
   // 在桌宠身上批准：牌子照举，气泡里给出完整命令和「允许 / 拒绝 / 去终端」
   askPermission({ id, tool, detail }) {
-    this.ask = { id, tool, detail };
+    // clipped：主进程那边已经截掉了一段（末尾是省略号），这时不给「允许」
+    this.ask = { id, tool, detail, clipped: /…$/.test(detail || '') };
     this.cardUntil = 0;
     const a = this.activity;
     if (!a || a.kind !== 'alert') this.alert('!', tr('say.approve'), true, tool);
@@ -372,7 +373,7 @@ class Pet {
     if (!r || r.off) return;
     const reasons = [...new Set((r.skipped || []).map((x) => x.reason))];
     if (r.eaten) {
-      const names = r.names.slice(0, 3).join('、') + (r.names.length > 3 ? ' …' : '');
+      const names = r.names.slice(0, 3).join(tr('punct.listSep')) + (r.names.length > 3 ? ' …' : '');
       this.doEmote('eat', 1.4);
       this.say(tr('say.ate', { n: r.eaten }), 3, false, { sub: names });
       setTimeout(() => {
@@ -1361,6 +1362,7 @@ class Pet {
         alpha: Math.min(fadeIn, fadeOut),
         subLines: this.ask ? 5 : 3,
         buttons: this.ask && b.important ? [['allow', tr('ask.allow')], ['deny', tr('ask.deny')], ['terminal', tr('ask.terminal')]] : null,
+        askClipped: !!(this.ask && this.ask.clipped),
       };
     }
     const a = this.activity;

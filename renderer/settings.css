@@ -38,6 +38,14 @@ body {
   font: 14px/1.5 'Segoe UI', 'Microsoft YaHei UI', 'Yu Gothic UI', system-ui, sans-serif;
 }
 
+/* 汉字按语言挑字体：中日文共用的汉字在不同字体里字形不一样，日文用日文字体、繁体用繁体字体 */
+:lang(zh-TW) body {
+  font-family: 'Segoe UI', 'Microsoft JhengHei UI', system-ui, sans-serif;
+}
+:lang(ja) body {
+  font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', system-ui, sans-serif;
+}
+
 body {
   padding: 18px 18px 22px;
   user-select: none;
