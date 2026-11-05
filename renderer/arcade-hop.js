@@ -300,6 +300,10 @@
       return { score: this.score, lives: null, label: tr('hop.height', { n: this.meters }) };
     }
 
+    metrics() {
+      return { meters: this.meters };
+    }
+
     summary() {
       return [{ text: tr('hop.heightSum', { n: this.meters }) }, { text: tr('hop.stars', { n: this.starsGot, pts: this.starsGot * STAR_PTS }) }];
     }

@@ -401,6 +401,7 @@ let countT = 0;
 let overT = 0;
 let result = null; // { score, best, record, summary }
 let scores = {};
+let achievements = []; // 游戏厅的成就：{ id, game, item, goal, value, unlockedAt }
 let t = 0;
 
 try {
@@ -408,6 +409,7 @@ try {
 } catch {}
 
 const bestOf = (id) => (scores[id] && scores[id].best) || 0;
+const achOf = (id) => achievements.find((a) => a.game === id) || null;
 
 function openIntro(i) {
   sel = clamp(i, 0, ARCADE.games.length - 1);
@@ -430,13 +432,17 @@ async function finishRun() {
   overT = 0;
   const prev = bestOf(def.id);
   const score = Math.max(0, Math.floor(run.score || 0));
-  result = { score, best: Math.max(prev, score), record: score > prev && score > 0, summary: run.summary ? run.summary() : [] };
+  result = { score, best: Math.max(prev, score), record: score > prev && score > 0, summary: run.summary ? run.summary() : [], unlocked: [] };
   sound(result.record ? 'record' : 'over');
   try {
-    const r = await api.saveScore(def.id, score);
+    const r = await api.saveScore(def.id, score, run.metrics ? run.metrics() : {});
     if (r) {
       scores[def.id] = { ...(scores[def.id] || {}), best: r.best, plays: r.plays };
       result.best = r.best;
+      if (r.achievements) achievements = r.achievements;
+      // 刚解锁的成就：结算里亮出来
+      result.unlocked = r.unlocked || [];
+      if (result.unlocked.length) sound('record');
     }
   } catch {}
 }
@@ -562,7 +568,15 @@ function drawIntro(dt) {
   const tag = g.wrapBalanced(tr(`${def.id}.tagline`), tw, { size: 7.5 }, 3);
   tag.forEach((line, k) => g.text(line, tx, p.y + 40 + k * 10, { size: 7.5, color: C.muted }));
   const best = bestOf(def.id);
-  g.text(best ? tr('arc.best', { n: best }) : tr('arc.noBest'), tx, p.y + 80, { size: 8, weight: 700, color: best ? C.accent : C.muted });
+  g.text(best ? tr('arc.best', { n: best }) : tr('arc.noBest'), tx, p.y + 70, { size: 8, weight: 700, color: best ? C.accent : C.muted });
+  // 这个游戏的成就：送什么装扮、目标和现在的进度、拿到没有
+  const ach = achOf(def.id);
+  if (ach) {
+    const vars = { name: tr(`ach.${ach.id}`), desc: tr(`ach.${ach.id}Desc`), item: tr(`item.${ach.item}`), value: ach.value, goal: ach.goal };
+    g.rect(tx, p.y + 81.5, 3, 3, ach.unlockedAt ? C.green : C.gold);
+    g.text(g.wrap(tr(ach.unlockedAt ? 'arc.achDone' : 'arc.achLine', vars), tw - 6, { size: 6.5, weight: 700 }, 1)[0], tx + 6, p.y + 83, { size: 6.5, weight: 700, color: ach.unlockedAt ? C.green : '#B9861F' });
+    if (!ach.unlockedAt) g.text(g.wrap(tr('arc.achGoal', vars), tw - 6, { size: 6 }, 1)[0], tx + 6, p.y + 92, { size: 6, color: C.muted });
+  }
 
   // 规则和操作说明：按内容挑字号，长的（比如日文、塔防）缩小一档，不能压到下面的按钮
   const by = p.y + p.h - 38;
@@ -637,7 +651,8 @@ function drawPause() {
 function drawOver(dt) {
   overT += dt;
   g.rect(0, 0, W, H, `rgba(15,17,28,${Math.min(0.66, overT * 2)})`);
-  const lines = result.summary || [];
+  // 刚解锁的成就放在最后，金色
+  const lines = [...(result.summary || []), ...result.unlocked.map((u) => ({ text: tr('arc.unlocked', { name: tr(`ach.${u.id}`), item: tr(`item.${u.item}`) }), color: '#B9861F', bold: true }))];
   const ph = 140 + lines.length * 10.5;
   const p = { x: W / 2 - 120, y: Math.max(8, H / 2 - ph / 2), w: 240, h: ph };
   const rise = Math.max(0, 1 - overT * 4) * 20;
@@ -744,6 +759,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   outfit = info.outfit || OUTFITS.effective({}, true);
   soundOn = info.sound !== false;
   scores = info.scores || {};
+  achievements = info.achievements || [];
   sel = clamp(sel, 0, ARCADE.games.length - 1);
   state = 'menu';
   canvas.focus();

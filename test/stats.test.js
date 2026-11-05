@@ -73,3 +73,19 @@ test('存盘再读回来一样；坏掉的文件当成空的', () => {
   broken.record(ev('UserPromptSubmit'));
   assert.equal(broken.data.totals.prompts, 1);
 });
+
+test('游戏厅的指标只记最好的那次，够了就解锁游戏成就', () => {
+  const s = new Stats(tmpFile());
+  s.recordArcade('bugs', { level: 5 });
+  s.recordArcade('bugs', { level: 3 });
+  assert.equal(s.data.arcade.bugs.level, 5);
+  assert.ok(!achievements.evaluate(s).includes('debugger'));
+  s.recordArcade('bugs', { level: 8 });
+  s.recordArcade('defense', { waves: 15 });
+  const fresh = achievements.evaluate(s);
+  assert.ok(fresh.includes('debugger'));
+  assert.ok(fresh.includes('guardian'));
+  assert.ok(!fresh.includes('climber'));
+  const prog = achievements.progress(s).find((a) => a.id === 'climber');
+  assert.deepEqual([prog.game, prog.value, prog.goal, prog.unlockedAt], ['hop', 0, 300, null]);
+});

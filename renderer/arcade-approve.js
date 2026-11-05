@@ -148,6 +148,10 @@
       return { score: this.score, lives: this.lives, label: this.streak >= 2 ? tr('approve.streak', { n: this.streak }) : tr('approve.count', { n: this.correct + this.mistakes.length }) };
     }
 
+    metrics() {
+      return { streak: this.bestStreak };
+    }
+
     // 结算：对了几条、最长连对，以及每一条错在哪
     summary() {
       const lines = [{ text: tr('approve.correct', { n: this.correct, streak: this.bestStreak }) }];

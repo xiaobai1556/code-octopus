@@ -111,6 +111,27 @@ function drawHead(px, blob, item, top, grow, t) {
       blob([[5, r(5), 6, 1], [4, r(4), 8, 1], [3, r(3), 10, 2], [4, r(1), 8, 1]], '#FFFFFF', '#B9BEC6');
       px(4, r(1), 8, 1, '#E3E6EA');
       break;
+    case 'bugclip': {
+      // 捉虫大作战的成就：头顶右边别着一只小 Bug 发卡
+      const K = '#1F1611';
+      px(9, r(3), 1, 1, K); // 触角
+      px(12, r(3), 1, 1, K);
+      px(9, r(2), 4, 1, '#7DB85C');
+      px(10, r(2), 1, 1, K); // 眼睛
+      px(12, r(2), 1, 1, '#3F7A32');
+      px(9, r(1), 4, 1, '#5E9E45');
+      px(8, r(1), 1, 1, K); // 小脚
+      px(13, r(1), 1, 1, K);
+      break;
+    }
+    case 'hardhat':
+      // 守护主分支的成就：黄色安全帽
+      px(5, r(3), 6, 1, '#F2C14E');
+      px(7, r(3), 2, 1, '#FFE08A'); // 中间那道棱
+      px(4, r(2), 8, 1, '#F2C14E');
+      px(7, r(2), 2, 1, '#FFE08A');
+      px(3, r(1), 11, 1, '#D9A22E'); // 帽檐，前面长一点
+      break;
     case 'partyhat':
       px(5, r(1), 6, 1, '#F25F8A');
       px(6, r(2), 4, 1, '#FFD43B');
@@ -195,6 +216,25 @@ function drawFace(px, item, er, dx, under) {
       px(ex + 2, er, 1, 2, F);
     }
     if (!under) px(7 + dx, er, 2, 1, F);
+  } else if (item === 'goggles') {
+    // 窗口跳跳的成就：飞行护目镜，镜片带点蓝，两边有带子
+    const F = '#6B4226';
+    for (const ex of [4 + dx, 11 + dx]) {
+      if (under) {
+        px(ex - 1, er, 3, 2, 'rgba(140,200,255,0.55)');
+        continue;
+      }
+      px(ex - 2, er - 1, 5, 1, F);
+      px(ex - 2, er + 2, 5, 1, F);
+      px(ex - 2, er, 1, 2, F);
+      px(ex + 2, er, 1, 2, F);
+      px(ex + 1, er, 1, 1, '#FFFFFF'); // 反光
+    }
+    if (!under) {
+      px(7 + dx, er, 2, 1, F);
+      px(0, er, 2 + dx, 1, '#3A2A1E'); // 带子
+      px(14 + dx, er, 2 - dx, 1, '#3A2A1E');
+    }
   } else if (item === 'sunglasses' && !under) {
     for (const lx of [2 + dx, 9 + dx]) {
       px(lx, er, 5, 2, '#16161A');
@@ -248,6 +288,15 @@ function drawNeck(px, item, top, grow, bottom) {
     for (let c = x0 + 1; c < x0 + w; c += 3) px(c, top + 5, 1, 2, L);
     px(3 - grow, top + 7, 2, 2, S); // 垂下来的一截
     px(3 - grow, top + 9, 2, 1, L);
+  } else if (item === 'shield') {
+    // 批准还是拒绝的成就：胸前一枚盾牌徽章，中间一个勾（深藏青，六种主色上都看得清）
+    const B = '#24346B';
+    px(6, top + 4, 4, 1, '#F2C14E'); // 金边
+    px(6, top + 5, 4, 1, B);
+    px(6, top + 6, 4, 1, B);
+    px(7, top + 7, 2, 1, B);
+    px(8, top + 5, 1, 1, '#FFFFFF');
+    px(7, top + 6, 1, 1, '#FFFFFF');
   } else if (item === 'plaid') {
     // 程序员节：格子衫（盖住下半身）
     const x0 = 2 - grow;

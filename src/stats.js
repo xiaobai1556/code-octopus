@@ -188,6 +188,14 @@ class Stats {
     return { turnMs };
   }
 
+  // 游戏厅一局结束：每个指标记最好的那次（捉虫的轮数、窗口跳跳的米数、连对条数、塔防守住的波数）
+  recordArcade(game, metrics) {
+    const all = (this.data.arcade ||= {});
+    const best = (all[game] ||= {});
+    for (const [k, v] of Object.entries(metrics || {})) if (typeof v === 'number' && v > (best[k] || 0)) best[k] = v;
+    this.scheduleSave();
+  }
+
   // 喂它吃了几个文件
   recordEaten(n) {
     this.data.totals.eaten += n;

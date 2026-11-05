@@ -601,6 +601,11 @@
       return { score: this.score, lives: null, hp: this.hp, hpMax: MAX_HP, label };
     }
 
+    // 守住了几波（死在第 n 波就是守住了 n - 1 波）
+    metrics() {
+      return { waves: Math.max(0, this.wave - 1) };
+    }
+
     summary() {
       const mvp = this.towers.slice().sort((a, b) => b.kills - a.kills)[0];
       const lines = [{ text: tr('defense.wavesSum', { n: Math.max(0, this.wave - 1) }) }, { text: tr('defense.killsSum', { n: this.kills }) }, { text: tr('defense.builtSum', { n: this.built }) }];

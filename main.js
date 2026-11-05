@@ -1440,6 +1440,9 @@ function openArcade() {
   arcadeWin.on('closed', () => (arcadeWin = null));
 }
 
+// 每个游戏结束时报上来的指标（成就看它们）：只收这几个
+const ARCADE_METRICS = { bugs: ['level'], hop: ['meters'], approve: ['streak'], defense: ['waves'] };
+
 function registerArcadeIpc() {
   ipcMain.handle('arcade:info', () => ({
     locale: locale(),
@@ -1447,12 +1450,22 @@ function registerArcadeIpc() {
     outfit: OUTFITS.effective(config.outfit, config.holidays),
     sound: config.sound !== false,
     scores: arcade.summary(),
+    achievements: achievements.progress(stats).filter((a) => a.game),
   }));
-  ipcMain.handle('arcade:score', (_e, game, score) => {
+  ipcMain.handle('arcade:score', (_e, game, score, metrics) => {
     const r = arcade.record(game, score);
-    // 破了以前的纪录（第一局不算）：桌面上的小章鱼来庆祝
-    if (r && r.record && r.prev > 0) sendTo(cursorOverlay(), 'arcade-record', { game, score: r.best });
-    return r;
+    if (!r) return null;
+    const clean = {};
+    for (const key of ARCADE_METRICS[game] || []) {
+      const v = Math.floor(Number(metrics && metrics[key]));
+      if (Number.isFinite(v) && v > 0) clean[key] = Math.min(v, 1_000_000);
+    }
+    stats.recordArcade(game, clean);
+    // 解锁了成就：桌面上的小章鱼来庆祝（顺手穿上新装扮）；没有成就但破了以前的纪录（第一局不算）：也来庆祝一下
+    const fresh = achievements.evaluate(stats);
+    if (fresh.length) unlock(fresh, cursorOverlay());
+    else if (r.record && r.prev > 0) sendTo(cursorOverlay(), 'arcade-record', { game, score: r.best });
+    return { ...r, unlocked: fresh.map((id) => ({ id, item: achievements.byId[id].item })), achievements: achievements.progress(stats).filter((a) => a.game) };
   });
 }
 

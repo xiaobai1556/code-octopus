@@ -90,3 +90,19 @@ test('每个游戏用到的文案四种语言都有', () => {
     assert.deepEqual(missing, [], lang);
   }
 });
+
+test('每个成就和它送的装扮都有名字，装扮都登记过部位，头上的有头顶高度', () => {
+  const achievements = require('../src/achievements');
+  const OUTFITS = require('../src/outfits');
+  for (const a of achievements.LIST) {
+    const item = OUTFITS.ITEMS[a.item];
+    assert.ok(item && !item.holiday, a.item);
+    if (item.slot === 'head') assert.ok(OUTFITS.headroom({ head: a.item }) > 0 || a.item === 'headband', a.item);
+    if (a.game) assert.ok(GAMES.includes(a.game), a.game);
+    for (const lang of Object.keys(I18N.STRINGS)) {
+      for (const key of [`ach.${a.id}`, `ach.${a.id}Desc`, `item.${a.item}`]) assert.ok(key in I18N.STRINGS[lang], `${lang} ${key}`);
+    }
+  }
+  // 每个游戏正好一个成就
+  assert.deepEqual(achievements.LIST.filter((a) => a.game).map((a) => a.game).sort(), [...GAMES].sort());
+});

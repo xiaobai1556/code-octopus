@@ -258,6 +258,11 @@
       return { score: this.score, lives: this.lives, label: this.mult > 1 ? `${label} · ${tr('bugs.combo', { n: this.mult })}` : label, labelColor: this.mult > 1 ? C.gold : null };
     }
 
+    // 成就看打到第几轮
+    metrics() {
+      return { level: this.level };
+    }
+
     summary() {
       return [{ text: tr('bugs.caught', { n: this.caught }) }, { text: tr('bugs.maxCombo', { n: this.maxCombo }) }, { text: tr('bugs.reached', { n: this.level }) }];
     }
