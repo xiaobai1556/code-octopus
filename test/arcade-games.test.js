@@ -209,7 +209,7 @@ function checkResult(id, { game, bad }) {
 
 const arcade = loadArcade();
 
-test('五个游戏都登记了，和 src/arcade.js 的列表一致', () => {
+test('游戏都登记了，和 src/arcade.js 的列表一致', () => {
   assert.deepStrictEqual(arcade.games.map((g) => g.id).sort(), GAMES.slice().sort());
 });
 
@@ -242,6 +242,8 @@ const PROBES = {
   },
   // 第 k 行是什么：当前行和后面排好的几行
   typing: (game, log) => [game.line, ...game.queue].forEach((l, i) => (log[game.lines + i] = l)),
+  // 每一帧叫什么、从哪边滑进来
+  stack: (game, log) => game.slider && fresh(log, [game.slider]).forEach((sl) => log.push(`${sl.name}<${sl.from}`)),
 };
 
 for (const id of GAMES) {

@@ -241,6 +241,21 @@ function drawFace(px, item, er, dx, under) {
       px(0, er, 2 + dx, 1, '#3A2A1E'); // 带子
       px(14 + dx, er, 2 - dx, 1, '#3A2A1E');
     }
+  } else if (item === 'monocle') {
+    // 调用栈的成就：右眼一片金边单片眼镜，下面垂一根链子
+    const ex = 11 + dx;
+    const F = '#D4A84B';
+    if (under) {
+      px(ex - 1, er, 3, 2, 'rgba(225,242,255,0.55)');
+    } else {
+      px(ex - 1, er - 1, 3, 1, F);
+      px(ex - 1, er + 2, 3, 1, F);
+      px(ex - 2, er, 1, 2, F);
+      px(ex + 2, er, 1, 2, F);
+      px(ex + 1, er, 1, 1, '#FFFFFF'); // 反光
+      px(ex + 2, er + 3, 1, 1, '#B98A2E'); // 链子
+      px(ex + 3, er + 4, 1, 1, '#B98A2E');
+    }
   } else if (item === 'sunglasses' && !under) {
     for (const lx of [2 + dx, 9 + dx]) {
       px(lx, er, 5, 2, '#16161A');
