@@ -484,7 +484,9 @@ async function finishRun() {
   try {
     const r = await api.saveScore(def.id, score, run.metrics ? run.metrics() : {}, runDay);
     if (r) {
-      scores[def.id] = { ...(scores[def.id] || {}), best: r.best, plays: r.plays };
+      scores[def.id] = { ...(scores[def.id] || {}), best: r.best, plays: r.plays, top: r.top || [] };
+      result.rank = r.rank || null;
+      result.top = r.top || [];
       result.best = r.best;
       if (runDay && r.dailyBest != null) {
         if (daily.day !== runDay) daily = { ...daily, day: runDay, scores: {} };
@@ -760,8 +762,10 @@ function drawOver(dt) {
   overT += dt;
   g.rect(0, 0, W, H, `rgba(15,17,28,${Math.min(0.66, overT * 2)})`);
   // 刚解锁的成就放在最后，金色
+  // 本地前五：这一局用方括号标出来
+  const topLine = result.top && result.top.length > 1 ? [{ text: tr('arc.topLine', { list: result.top.map((v, i) => (i + 1 === result.rank ? `[${v}]` : String(v))).join(' · ') }), color: C.muted }] : [];
   const streakLine = result.day && result.streak ? [{ text: tr(result.streak > 1 ? 'arc.streakLine' : 'arc.streakFirst', { n: result.streak }), color: '#B9861F' }] : [];
-  const lines = [...(result.summary || []), ...streakLine, ...result.unlocked.map((u) => ({ text: tr('arc.unlocked', { name: tr(`ach.${u.id}`), item: tr(`item.${u.item}`) }), color: '#B9861F', bold: true }))];
+  const lines = [...(result.summary || []), ...topLine, ...streakLine, ...result.unlocked.map((u) => ({ text: tr('arc.unlocked', { name: tr(`ach.${u.id}`), item: tr(`item.${u.item}`) }), color: '#B9861F', bold: true }))];
   const ph = 140 + lines.length * 10.5;
   const p = { x: W / 2 - 120, y: Math.max(8, H / 2 - ph / 2), w: 240, h: ph };
   const rise = Math.max(0, 1 - overT * 4) * 20;
@@ -805,11 +809,36 @@ function drawSparkle(dt) {
 
 // ---------- 主循环 ----------
 let last = performance.now();
+// 手柄（Gamepad API）：方向键 / 左摇杆移动，A 确定（也当空格），B 返回，X 今日挑战，Start 暂停
+const PAD_MAP = { left: ['left'], right: ['right'], up: ['up'], down: ['down'], a: ['space', 'enter'], b: ['esc'], x: ['daily'], start: ['pause'] };
+let padPrev = {};
+function pollGamepad() {
+  const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
+  const gp = pads.find((p) => p && p.connected);
+  if (!gp) {
+    padPrev = {};
+    return;
+  }
+  const btn = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+  const ax = gp.axes[0] || 0;
+  const ay = gp.axes[1] || 0;
+  const now = { left: btn(14) || ax < -0.5, right: btn(15) || ax > 0.5, up: btn(12) || ay < -0.5, down: btn(13) || ay > 0.5, a: btn(0), b: btn(1), x: btn(2), start: btn(9) };
+  for (const [k, actions] of Object.entries(PAD_MAP)) {
+    for (const a of actions) {
+      if (now[k]) input.held.add(a);
+      else if (padPrev[k]) input.held.delete(a);
+      if (now[k] && !padPrev[k]) input.hits.add(a);
+    }
+  }
+  padPrev = now;
+}
+
 function frame(now) {
   const dt = Math.min(1 / 30, (now - last) / 1000);
   last = now;
   t += dt;
   hovering = false;
+  pollGamepad();
   try {
     ctx.fillStyle = C.edge;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -898,7 +927,8 @@ function mockApi() {
       const all = load();
       const cur = all[game] || { best: 0, plays: 0 };
       const prev = cur.best;
-      all[game] = { best: Math.max(prev, score), plays: cur.plays + 1 };
+      const top = [...(cur.top || []), score].filter((v) => v > 0).sort((a, b) => b - a).slice(0, 5);
+      all[game] = { best: Math.max(prev, score), plays: cur.plays + 1, top };
       let dailyBest = null;
       if (day) {
         all.daily = all.daily || {};
@@ -910,7 +940,7 @@ function mockApi() {
       try {
         localStorage.setItem('arcade-scores', JSON.stringify(all));
       } catch {}
-      return { best: all[game].best, prev, record: score > prev, plays: all[game].plays, dailyBest, streak: day ? all.streak.n : null };
+      return { best: all[game].best, prev, record: score > prev, plays: all[game].plays, dailyBest, streak: day ? all.streak.n : null, rank: score > 0 && top.includes(score) ? top.indexOf(score) + 1 : null, top };
     },
   };
 }

@@ -6,12 +6,14 @@ const { bumpStreak } = require('./rng');
 const GAMES = ['bugs', 'hop', 'approve', 'defense', 'typing', 'stack', 'whack', 'deps'];
 const MAX_SCORE = 10_000_000;
 const KEEP_DAYS = 14; // 今日挑战的成绩只留最近两周
+const TOP_N = 5; // 每个游戏记前几名
 
 class ArcadeScores {
   constructor(file) {
     this.file = file;
     // daily：{ 'YYYY-MM-DD': { bugs: 那天今日挑战的最好成绩 } }；streak：今日挑战连续打卡 { last, n, best }
-    this.data = { best: {}, plays: {}, bestAt: {}, daily: {}, streak: {} };
+    // top：每个游戏的前 5 名 [{ score, at }]，分高的在前，同分先来的在前
+    this.data = { best: {}, plays: {}, bestAt: {}, daily: {}, streak: {}, top: {} };
     try {
       const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
       for (const key of Object.keys(this.data)) if (saved && typeof saved[key] === 'object') this.data[key] = saved[key];
@@ -20,7 +22,12 @@ class ArcadeScores {
 
   // { bugs: { best, plays }, ... }
   summary() {
-    return Object.fromEntries(GAMES.map((g) => [g, { best: this.data.best[g] || 0, plays: this.data.plays[g] || 0 }]));
+    return Object.fromEntries(GAMES.map((g) => [g, { best: this.data.best[g] || 0, plays: this.data.plays[g] || 0, top: this.topOf(g) }]));
+  }
+
+  // 某个游戏的前几名（只要分数）
+  topOf(game) {
+    return (this.data.top[game] || []).map((e) => e.score);
   }
 
   // 某天各个游戏今日挑战的最好成绩
@@ -33,7 +40,8 @@ class ArcadeScores {
     return { ...this.data.streak };
   }
 
-  // 一局结束：记下来，返回 { best, prev, record, plays, dailyBest, dailyRecord, streak }；不认识的游戏返回 null。
+  // 一局结束：记下来，返回 { best, prev, record, plays, dailyBest, dailyRecord, streak, rank, top }；不认识的游戏返回 null。
+  // rank：这一局排在本地前 5 名的第几（没进就是 null），top：前几名的分数
   // day：这一局是哪天的今日挑战（平常的一局不传）；今日挑战的成绩也算进总的最高分
   record(game, score, day) {
     if (!GAMES.includes(game)) return null;
@@ -45,6 +53,16 @@ class ArcadeScores {
       this.data.bestAt[game] = new Date().toISOString();
     }
     this.data.plays[game] = (this.data.plays[game] || 0) + 1;
+    let rank = null;
+    if (n > 0) {
+      const entry = { score: n, at: new Date().toISOString() };
+      const list = (this.data.top[game] ||= []);
+      list.push(entry);
+      list.sort((a, b) => b.score - a.score || (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+      list.length = Math.min(list.length, TOP_N);
+      const i = list.indexOf(entry);
+      rank = i >= 0 ? i + 1 : null;
+    }
     let dailyBest = null;
     let dailyRecord = false;
     let streak = null;
@@ -60,7 +78,7 @@ class ArcadeScores {
     try {
       writeJsonAtomic(this.file, this.data);
     } catch {}
-    return { best: Math.max(prev, n), prev, record, plays: this.data.plays[game], dailyBest, dailyRecord, streak };
+    return { best: Math.max(prev, n), prev, record, plays: this.data.plays[game], dailyBest, dailyRecord, streak, rank, top: this.topOf(game) };
   }
 }
 

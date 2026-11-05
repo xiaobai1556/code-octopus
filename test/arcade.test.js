@@ -13,13 +13,13 @@ test('最高分：破纪录才更新，次数每局加一，存盘读回来一�
   const file = tmpFile();
   const a = new ArcadeScores(file);
   const plain = { dailyBest: null, dailyRecord: false, streak: null }; // 不是今日挑战
-  assert.deepEqual(a.record('bugs', 120), { best: 120, prev: 0, record: true, plays: 1, ...plain });
-  assert.deepEqual(a.record('bugs', 80), { best: 120, prev: 120, record: false, plays: 2, ...plain });
-  assert.deepEqual(a.record('bugs', 120), { best: 120, prev: 120, record: false, plays: 3, ...plain }); // 平了不算破
+  assert.deepEqual(a.record('bugs', 120), { best: 120, prev: 0, record: true, plays: 1, ...plain, rank: 1, top: [120] });
+  assert.deepEqual(a.record('bugs', 80), { best: 120, prev: 120, record: false, plays: 2, ...plain, rank: 2, top: [120, 80] });
+  assert.deepEqual(a.record('bugs', 120), { best: 120, prev: 120, record: false, plays: 3, ...plain, rank: 2, top: [120, 120, 80] }); // 平了不算破，排在先来的后面
   assert.equal(a.record('bugs', 300).record, true);
   const again = new ArcadeScores(file);
-  assert.deepEqual(again.summary().bugs, { best: 300, plays: 4 });
-  assert.deepEqual(again.summary().hop, { best: 0, plays: 0 });
+  assert.deepEqual(again.summary().bugs, { best: 300, plays: 4, top: [300, 120, 120, 80] });
+  assert.deepEqual(again.summary().hop, { best: 0, plays: 0, top: [] });
   assert.ok(!fs.existsSync(file + '.tmp'));
 });
 
@@ -36,7 +36,7 @@ test('最高分：不认识的游戏、乱七八糟的分数', () => {
 test('坏掉的成绩文件当成空的', () => {
   const file = tmpFile();
   fs.writeFileSync(file, '{"best": ');
-  assert.deepEqual(new ArcadeScores(file).summary().approve, { best: 0, plays: 0 });
+  assert.deepEqual(new ArcadeScores(file).summary().approve, { best: 0, plays: 0, top: [] });
 });
 
 test('题库：每条都有工具、内容和对得上的理由，该允许和该拒绝的都不少', () => {
@@ -110,8 +110,8 @@ test('每个成就和它送的装扮都有名字，装扮都登记过部位，�
 
 test('今日挑战：按天记最好成绩，也算进总的最高分，只留最近两周', () => {
   const a = new ArcadeScores(tmpFile());
-  assert.deepEqual(a.record('hop', 50, '2026-11-05'), { best: 50, prev: 0, record: true, plays: 1, dailyBest: 50, dailyRecord: true, streak: 1 });
-  assert.deepEqual(a.record('hop', 30, '2026-11-05'), { best: 50, prev: 50, record: false, plays: 2, dailyBest: 50, dailyRecord: false, streak: 1 });
+  assert.deepEqual(a.record('hop', 50, '2026-11-05'), { best: 50, prev: 0, record: true, plays: 1, dailyBest: 50, dailyRecord: true, streak: 1, rank: 1, top: [50] });
+  assert.deepEqual(a.record('hop', 30, '2026-11-05'), { best: 50, prev: 50, record: false, plays: 2, dailyBest: 50, dailyRecord: false, streak: 1, rank: 2, top: [50, 30] });
   assert.equal(a.record('hop', 40, '2026-11-06').dailyRecord, true); // 新的一天重新算
   assert.deepEqual(a.dailyOf('2026-11-05'), { hop: 50 });
   assert.deepEqual(a.dailyOf('2026-11-07'), {});
@@ -157,4 +157,14 @@ test('播种的随机数：同一个种子同一串，不同种子不一样，�
   const mean = xs.reduce((s2, v) => s2 + v, 0) / xs.length;
   assert.ok(Math.abs(mean - 0.5) < 0.03, `mean ${mean}`);
   assert.match(dayKey(new Date(2026, 0, 5)), /^2026-01-05$/);
+});
+
+test('本地前 5 名：只留五个，没进前五的 rank 是 null，0 分不算', () => {
+  const a = new ArcadeScores(tmpFile());
+  for (const n of [10, 50, 30, 70, 20]) a.record('stack', n);
+  assert.deepEqual(a.topOf('stack'), [70, 50, 30, 20, 10]);
+  assert.equal(a.record('stack', 5).rank, null);
+  assert.equal(a.record('stack', 60).rank, 2);
+  assert.deepEqual(a.topOf('stack'), [70, 60, 50, 30, 20]);
+  assert.equal(a.record('stack', 0).rank, null);
 });
