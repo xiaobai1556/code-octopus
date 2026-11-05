@@ -46,6 +46,8 @@ A little pixel octopus lives on your desktop and follows along with Claude Code:
 - **Languages**: follows your system language. Simplified Chinese, Traditional Chinese, English and Japanese are supported, and you can switch by hand in settings
 - If you're away for 5 minutes they fall asleep, and they wave when you come back. They hide while a video or game is full screen; if Claude needs your approval, asks a question, has a plan ready or finishes a long task during that time, you get a system notification instead, and clicking it takes you to that session (can be turned off in settings). With "Approve from the pet" on, permission requests hidden by a full-screen app go straight to the terminal
 
+![Octopus Arcade: the menu, Type the Code, Call Stack and Hotfix](docs/arcade-en.png)
+
 ## Install
 
 Download `Code-Octopus-Setup-<version>.exe` from the GitHub Releases page and run it. The installer isn't code-signed, so the first run shows "Windows protected your PC": click "More info", then "Run anyway". After installing, open settings from the tray icon and click "Connect to Claude Code".
