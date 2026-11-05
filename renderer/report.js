@@ -150,6 +150,19 @@ function render() {
   $('files-title').textContent = tr('rep.topFiles');
   topList($('files'), d.files);
 
+  // 这一天的 git 提交和推送：最后几条提交说明（新的在上面）
+  const commits = (d.commitLog || []).slice().reverse();
+  $('git-block').hidden = !(d.commits || d.pushes);
+  $('git-title').textContent = tr('rep.git');
+  $('git-sub').textContent = tr('rep.gitSub', { c: d.commits || 0, p: d.pushes || 0 });
+  $('commits').replaceChildren(
+    ...commits.map((c) => {
+      const li = el('li', c.text ? '' : 'quiet', c.text || tr('rep.gitQuiet'));
+      if (c.project) li.append(el('span', '', c.project));
+      return li;
+    })
+  );
+
   // 这一天在游戏厅里玩了什么：几局、最高分
   const games = Object.entries(d.games || {}).sort((a, b) => b[1].plays - a[1].plays);
   $('games-block').hidden = !games.length;
@@ -327,6 +340,13 @@ function mockApi() {
     hours: [0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 40, 66, 21, 8, 52, 97, 120, 88, 30, 14, 61, 79, 34, 0],
     costUSD: 18.42,
     games: { bugs: { plays: 3, best: 840 }, defense: { plays: 1, best: 2310 } },
+    commits: 3,
+    pushes: 1,
+    commitLog: [
+      { text: 'Fix the login button', project: 'web-app' },
+      { text: 'Add a retry to fetchUser', project: 'web-app' },
+      { text: '', project: 'api' },
+    ],
   };
   return {
     get: async (date) => ({ date: date || today, today, day: (date || today) === today ? day : null, dates: ['2026-10-07', today], trend: mockTrend(date || today), locale: I18N.detect(navigator.languages), color: 0 }),

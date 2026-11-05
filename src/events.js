@@ -141,17 +141,44 @@ const TEST_HEADS = [
   /^make\s+(?:\S+\s+)*(?:test|check)\b/i,
 ];
 
-function isTestCommand(cmd) {
+// 命令拆成一段一段（&& || ; | 换行），每段去掉 sudo、npx、VAR=1 这些前缀
+function segments(cmd) {
   return String(cmd || '')
     .split(/&&|\|\||[;|\n]/)
-    .some((seg) => {
+    .map((seg) => {
       let s = seg.trim().replace(/\)+$/, '').trim(); // (cd app && npm test) 的右括号
       for (let prev = ''; prev !== s; ) {
         prev = s;
         s = s.replace(RUN_PREFIX, '');
       }
-      return TEST_HEADS.some((re) => re.test(s));
+      return s;
     });
+}
+
+function isTestCommand(cmd) {
+  return segments(cmd).some((s) => TEST_HEADS.some((re) => re.test(s)));
+}
+
+// git commit / git push：命令里有，而且输出看得出真的成功了（提交有新的哈希；推送有 "To 远端" 和 "旧..新 分支 -> 分支"，没被拒）。
+// git 前面可以有 -C 目录、-c 配置、--no-pager 这些
+const GIT_HEAD = /^git(?:\.exe)?\s+(?:(?:-C|-c)\s+\S+\s+|--[\w-]+(?:=\S+)?\s+)*(commit|push)\b/i;
+function gitOutcome(ev, failed) {
+  if (failed || !/^(Bash|PowerShell)$/.test(ev.tool_name || '')) return null;
+  const ops = new Set(segments(ev.tool_input && ev.tool_input.command).map((s) => (s.match(GIT_HEAD) || [])[1]).filter(Boolean).map((op) => op.toLowerCase()));
+  if (!ops.size) return null;
+  const text = toText(ev.tool_result ?? ev.tool_response);
+  if (ops.has('push') && /^To\s+\S+/m.test(text) && !/\[(?:remote )?rejected\]/.test(text)) {
+    const m = text.match(/(?:[0-9a-f]{7,40}\.\.\.?[0-9a-f]{7,40}|\[new (?:branch|tag)\])\s+\S+\s+->\s+(\S+)/);
+    if (m) return { op: 'push', text: short(m[1], 40) };
+  }
+  if (ops.has('commit')) {
+    const m = text.match(/^\[[^\]\n]*?\b[0-9a-f]{7,40}\]\s*(.*)$/m); // [main 1a2b3c4] 修好登录 / [main (root-commit) 1a2b3c4] 第一次提交
+    if (m) return { op: 'commit', text: short(m[1], 60) };
+    // git commit -q 成功了什么都不打印（没东西可提交会出错退出，走不到这里）
+    const quiet = segments(ev.tool_input.command).some((seg) => /^git\b.*\bcommit\b.*\s(?:-q|--quiet)\b/i.test(seg));
+    if (quiet && !/nothing (?:added )?to commit|no changes added/i.test(text)) return { op: 'commit', text: '' };
+  }
+  return null;
 }
 
 function testOutcome(ev, failed) {
@@ -208,6 +235,7 @@ function summarize(ev) {
       out.detail = describeTool(out.tool, ev.tool_input || {}); // 和 PermissionRequest 的对得上：等批准的那个工具跑完了
       out.error = failed;
       out.test = testOutcome(ev, failed);
+      out.git = out.test ? null : gitOutcome(ev, failed);
       out.task = failed ? null : taskChange(e, out.tool, ev.tool_input || {}, ev.tool_response);
       break;
     }

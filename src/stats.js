@@ -5,6 +5,7 @@ const { writeJsonAtomic } = require('./jsonfile');
 const KEEP_DAYS = 90;
 const MAX_TURN_MS = 3 * 60 * 60 * 1000; // 一轮最多算 3 小时，防止忘了关的会话把时长撑爆
 const MAX_KEYS = 300;
+const MAX_COMMIT_LOG = 8; // 日报里列出当天最后几次提交
 
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -32,7 +33,7 @@ function emptyDay() {
 
 // 一辈子的累计数字（按天的数据只留 90 天），成就靠它判断
 function emptyTotals() {
-  return { sessions: 0, prompts: 0, tools: 0, edits: 0, testsPass: 0, helpers: 0, done: 0, busyMs: 0, lateNight: 0, earlyMorning: 0, eaten: 0 };
+  return { sessions: 0, prompts: 0, tools: 0, edits: 0, testsPass: 0, helpers: 0, done: 0, busyMs: 0, lateNight: 0, earlyMorning: 0, eaten: 0, commits: 0, pushes: 0 };
 }
 
 const active = (d) => !!d && (d.prompts > 0 || d.toolCount > 0);
@@ -61,6 +62,8 @@ function totalsFromDays(days) {
     t.helpers += d.helpers;
     t.done += d.done;
     t.busyMs += d.busyMs;
+    t.commits += d.commits || 0;
+    t.pushes += d.pushes || 0;
     t.lateNight += d.hours.slice(0, 4).reduce((a, b) => a + b, 0);
     t.earlyMorning += d.hours.slice(5, 7).reduce((a, b) => a + b, 0);
     best.dayTools = Math.max(best.dayTools, d.toolCount);
@@ -155,6 +158,15 @@ class Stats {
         break;
       case 'PostToolUse':
       case 'PostToolUseFailure':
+        // git 提交、推送：日报里列出当天的提交说明（只留最后几条）
+        if (ev.git && ev.git.op === 'commit') {
+          d.commits = (d.commits || 0) + 1;
+          t.commits = (t.commits || 0) + 1;
+          d.commitLog = [...(d.commitLog || []), { text: String(ev.git.text || ''), project: ev.project || '' }].slice(-MAX_COMMIT_LOG);
+        } else if (ev.git && ev.git.op === 'push') {
+          d.pushes = (d.pushes || 0) + 1;
+          t.pushes = (t.pushes || 0) + 1;
+        }
         if (ev.test === 'pass') {
           d.tests.pass++;
           t.testsPass++;

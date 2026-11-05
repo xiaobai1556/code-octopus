@@ -505,6 +505,14 @@ class Pet {
         } else if (ev.test === 'fail') {
           this.doEmote(Math.random() < 0.4 ? 'headshake' : 'sad', 2.4);
           this.say(tr('say.testFail'), 2.4);
+        } else if (ev.git && ev.git.op === 'commit') {
+          this.doEmote('pump', 1.3);
+          this.say(tr('say.commit'), 2.4, false, { sub: ev.git.text, quote: true });
+          this.world.stamp(this);
+        } else if (ev.git && ev.git.op === 'push') {
+          this.doEmote('wave', 1.6);
+          this.say(tr('say.push'), 2.4, false, { sub: ev.git.text ? `→ ${ev.git.text}` : '' });
+          this.world.rocket(this);
         } else if (ev.error) {
           this.doEmote('oops', 1.2);
           this.say(tr('say.error'), 1.8);

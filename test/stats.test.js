@@ -111,3 +111,16 @@ test('游戏厅的每一局也记到当天：几局、最高分', () => {
   s.recordGame('hop', -3);
   assert.deepEqual(s.get(dayKey()).games, { bugs: { plays: 3, best: 340 }, hop: { plays: 1, best: 0 } });
 });
+
+test('git 提交、推送记到当天；日报里只留最后几条提交说明', () => {
+  const s = new Stats(tmpFile());
+  for (let i = 1; i <= 10; i++) s.record(ev('PostToolUse', { git: { op: 'commit', text: `c${i}` } }));
+  s.record(ev('PostToolUse', { git: { op: 'push', text: 'main' } }));
+  const d = s.get(dayKey());
+  assert.equal(d.commits, 10);
+  assert.equal(d.pushes, 1);
+  assert.equal(d.commitLog.length, 8);
+  assert.deepEqual(d.commitLog[7], { text: 'c10', project: 'app' });
+  assert.equal(s.data.totals.commits, 10);
+  assert.equal(s.data.totals.pushes, 1);
+});

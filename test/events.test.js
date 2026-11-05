@@ -125,3 +125,25 @@ test('任务工具：TaskCreate 跑完才拿到编号，TaskUpdate 改状态', (
   assert.equal(updated.task.status, 'in_progress');
   assert.equal(updated.todo, '在写测试');
 });
+
+test('git：真的提交、推送成功了才算；只是提到 git、没东西可提交、推送被拒都不算', () => {
+  const git = (command, stdout, stderr = '', extra = {}) => post(command, undefined, { tool_response: { stdout, stderr }, ...extra }).git;
+  assert.deepEqual(git('git add -A && git commit -m "fix login"', '[main 1a2b3c4] fix login\n 2 files changed'), { op: 'commit', text: 'fix login' });
+  assert.deepEqual(git('git commit -m init', '[main (root-commit) 0f1e2d3] init'), { op: 'commit', text: 'init' });
+  assert.deepEqual(git('git -C repo --no-pager commit -m y', '[dev abcdef0] y'), { op: 'commit', text: 'y' });
+  assert.deepEqual(git('git commit -q -m x', ''), { op: 'commit', text: '' }); // -q 成功了什么都不打印
+  assert.equal(git('git commit -m x', 'On branch main\nnothing to commit, working tree clean'), null);
+  assert.equal(git('git commit -q -m x', 'nothing added to commit but untracked files present'), null);
+  assert.deepEqual(git('git push -u origin main', '', 'To https://github.com/a/b\n   c37d3ee..9d0315f  main -> main'), { op: 'push', text: 'main' });
+  assert.deepEqual(git('git push origin feat', '', 'To github.com:a/b.git\n * [new branch]      feat -> feat'), { op: 'push', text: 'feat' });
+  assert.deepEqual(git('git push -f', '', 'To github.com:a/b.git\n + 1111111...2222222 main -> main (forced update)'), { op: 'push', text: 'main' });
+  // 提交加推送一起：算推送
+  assert.equal(git('git commit -m a && git push', '[main 1234567] a', 'To x\n   1234567..89abcde  main -> main').op, 'push');
+  assert.equal(git('git push', '', 'To github.com:a/b.git\n ! [rejected]        main -> main (fetch first)\nerror: failed to push'), null);
+  assert.equal(git('git push', '', 'Everything up-to-date'), null);
+  assert.equal(git('echo git commit', 'git commit'), null);
+  assert.equal(git('git log --oneline', '[main 1a2b3c4] looks like a commit'), null);
+  assert.equal(git('git commit -m x', '[main 1a2b3c4] x', '', { hook_event_name: 'PostToolUseFailure' }), null);
+  // 测试命令优先当测试
+  assert.equal(post('npm test && git commit -m t', '# pass 3\n[main 1a2b3c4] t').git, null);
+});

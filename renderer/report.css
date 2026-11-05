@@ -278,6 +278,9 @@ h2 small {
   margin-left: 4px;
   font-variant-numeric: tabular-nums;
 }
+.top .quiet {
+  color: var(--muted);
+}
 .top .none {
   list-style: none;
   margin-left: -18px;

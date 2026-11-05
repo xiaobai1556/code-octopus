@@ -635,6 +635,16 @@ const world = {
       this.particles.push({ kind: 'square', x: pet.x + rand(-6, 6), y: pet.y - pet.height * 0.45, vx: rand(-90, 90), vy: rand(-200, -60), g: 900, life: rand(0.5, 0.9), max: 0.9, size: pet.Pd * 0.5, color: pick(['#F4F1EA', '#C9B8A3', '#FFE066']) });
     }
   },
+  // git 提交：身边冒一个绿色的勾（头顶是气泡，会挡住），再撒几颗星星
+  stamp(pet) {
+    this.particles.push({ kind: 'check', x: pet.x + pet.facing * (pet.halfW + pet.Pd * 4), y: pet.y - pet.height * 0.6, vx: pet.facing * 6, vy: -22, g: 0, life: 1.6, max: 1.6, size: pet.Pd * 0.9, color: '#3F9A5B' });
+    this.sparkles(pet);
+  },
+  // git 推送：放一枚小火箭，越飞越快，屁股后面喷火（喷火见 tick 里的 rocketTrails）
+  rocket(pet) {
+    this.particles.push({ kind: 'rocket', x: pet.x + pet.facing * pet.halfW, y: pet.y - pet.height * 0.6, vx: pet.facing * 10, vy: -30, g: -520, life: 1.7, max: 1.7, size: pet.Pd * 0.7, color: '#F4F1EA', outline: '#D97757' });
+    this.poof(pet.x + pet.facing * pet.halfW, pet.y - pet.height * 0.3);
+  },
   poof(x, y) {
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * Math.PI * 2;
@@ -1068,6 +1078,13 @@ function render(poses, views) {
   }
 }
 
+// 飞着的小火箭每一帧往下喷几粒火
+function rocketTrails() {
+  for (const q of world.particles.filter((p) => p.kind === 'rocket' && p.life > 0.15 && p.y > -50)) {
+    world.particles.push({ kind: 'square', x: q.x + rand(-1, 1) * q.size, y: q.y + q.size * 3.5, vx: rand(-25, 25), vy: rand(30, 70), g: 0, life: 0.35, max: 0.35, size: q.size * rand(0.7, 1.1), color: pick(['#FFB347', '#FFD43B', '#F25F5C']) });
+  }
+}
+
 // 叠罗汉时上面的画在下面的后面
 function drawOrder() {
   const depth = (p) => {
@@ -1141,6 +1158,7 @@ function tick(now) {
     q.life -= dt;
   }
   world.particles = world.particles.filter((q) => q.life > 0);
+  rocketTrails();
 
   const poses = new Map(world.pets.map((p) => [p, p.pose()]));
   for (const [p, q] of poses) p.notePose(q);
@@ -1434,10 +1452,12 @@ function runDemo() {
     [24600, e('PermissionRequest', { tool: 'Bash', toolKind: 'shell', detail: 'npm test -- --update-snapshots' })],
     [32000, e('PreToolUse', { tool: 'Bash', toolKind: 'shell', detail: 'npm test -- --update-snapshots' })],
     [34400, e('PostToolUse', { tool: 'Bash', toolKind: 'shell', test: 'pass' })],
-    [37000, e('PreToolUse', { tool: 'AskUserQuestion', toolKind: 'other', decision: 'question', text: tr('demo.question') })],
-    [44000, e('PostToolUse', { tool: 'AskUserQuestion', toolKind: 'other' })],
-    [45000, e('Stop', { text: tr('demo.summary') })],
-    [53000, e('SessionEnd', { reason: 'other' })],
+    [37000, e('PostToolUse', { tool: 'Bash', toolKind: 'shell', git: { op: 'commit', text: tr('demo.commit') } })],
+    [39600, e('PostToolUse', { tool: 'Bash', toolKind: 'shell', git: { op: 'push', text: 'main' } })],
+    [42400, e('PreToolUse', { tool: 'AskUserQuestion', toolKind: 'other', decision: 'question', text: tr('demo.question') })],
+    [49400, e('PostToolUse', { tool: 'AskUserQuestion', toolKind: 'other' })],
+    [50400, e('Stop', { text: tr('demo.summary') })],
+    [58400, e('SessionEnd', { reason: 'other' })],
   ];
   demoTimers = steps.map(([ms, ev]) => setTimeout(() => world.onClaudeEvent(ev), ms));
 }
