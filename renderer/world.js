@@ -38,6 +38,7 @@ const world = {
   ridingUntil: 0, // 有桌宠正被窗口带着走时，位置一变就立刻重画
   pets: [],
   particles: [],
+  fakeIcons: [], // 小章鱼拖着玩的假图标（只画出来，不接收点击，和真的文件没关系）
   mouse: null,
   greeted: {},
   // 多显示器：这块屏是不是主屏（第一只小章鱼在这里出生），左右边上通往别的屏的口子 { to, y1, y2 }
@@ -635,6 +636,44 @@ const world = {
       this.particles.push({ kind: 'square', x: pet.x + rand(-6, 6), y: pet.y - pet.height * 0.45, vx: rand(-90, 90), vy: rand(-200, -60), g: 900, life: rand(0.5, 0.9), max: 0.9, size: pet.Pd * 0.5, color: pick(['#F4F1EA', '#C9B8A3', '#FFE066']) });
     }
   },
+  // 拖图标：在小章鱼身后冒出一个假的桌面图标
+  spawnIcon(pet) {
+    const names = tr('haul.items').split('|');
+    const label = pick(names);
+    const ext = (label.match(/\.(\w+)$/) || [])[1] || '';
+    const type = { txt: 'doc', md: 'doc', docx: 'word', js: 'js', png: 'image', psd: 'image', zip: 'zip' }[ext.toLowerCase()] || 'folder';
+    const icon = { label, type, x: 0, y: 0, holder: pet, born: performance.now(), leftAt: 0 };
+    this.fakeIcons.push(icon);
+    pet.haulIcon = icon;
+    this.followIcon(icon);
+    this.poof(icon.x, icon.y - pet.Pd * 4);
+  },
+  // 拖着的图标跟在身后
+  followIcon(icon) {
+    const pet = icon.holder;
+    icon.x = pet.x - pet.facing * (pet.halfW + pet.Pd * 5);
+    icon.y = pet.y;
+  },
+  releaseIcon(pet) {
+    const icon = pet.haulIcon;
+    pet.haulIcon = null;
+    if (!icon) return;
+    icon.holder = null;
+    icon.leftAt = performance.now();
+  },
+  // 钓上来一样东西：从浮漂那儿划一道弧飞到小章鱼手里
+  catchSomething(pet) {
+    const what = pick(['fish', 'fish', 'bug', 'boot']);
+    const color = { fish: '#F2A65A', bug: '#7DB85C', boot: '#8B6A4E' }[what];
+    const x0 = pet.x + pet.facing * 11 * pet.Pd;
+    const y0 = pet.y + 9 * pet.Pd;
+    const x1 = pet.x + pet.facing * pet.halfW * 0.5;
+    const y1 = pet.y - pet.height;
+    const T = 0.8;
+    const g = 700;
+    this.particles.push({ kind: what, x: x0, y: y0, vx: (x1 - x0) / T, vy: (y1 - y0) / T - 0.5 * g * T, g, life: T + 0.25, max: T + 0.25, size: pet.Pd * 0.8, color });
+    if (Math.random() < 0.5) pet.say(tr(`fish.${what}`), 1.8);
+  },
   // 吹泡泡：从小棒那儿飘出去，慢慢往上飘、左右晃
   soapBubble(pet) {
     const colors = ['#BFE6FF', '#E6CCFF', '#CCF5E1', '#FFE0F0'];
@@ -1059,6 +1098,7 @@ function render(poses, views) {
   if (!host) drawPreviewWindows();
   const dpr = world.dpr;
 
+  drawIcons(performance.now());
   for (const pet of drawOrder()) pet.draw(ctx, poses.get(pet));
   world.games.draw(ctx);
   world.teaser.draw(ctx);
@@ -1081,6 +1121,67 @@ function render(poses, views) {
     else if (v.card) drawCard(pet, v);
     else drawBubble(pet, v);
   }
+}
+
+// 假图标：拖着的跟着小章鱼；放下的待一会儿慢慢淡掉
+const ICON_STAY_MS = 7000;
+const ICON_FADE_MS = 1000;
+function updateIcons(now) {
+  for (const icon of world.fakeIcons) {
+    // 被叫去干活、被拖起来、被转到别的屏：松手
+    if (icon.holder && (!world.pets.includes(icon.holder) || !['haul', 'haulStart'].includes(icon.holder.mode))) world.releaseIcon(icon.holder);
+    if (icon.holder) world.followIcon(icon);
+  }
+  world.fakeIcons = world.fakeIcons.filter((icon) => icon.holder || now - icon.leftAt < ICON_STAY_MS + ICON_FADE_MS);
+}
+
+function iconAlpha(icon, now) {
+  const appear = Math.min(1, (now - icon.born) / 250);
+  const fade = icon.holder ? 1 : 1 - Math.max(0, now - icon.leftAt - ICON_STAY_MS) / ICON_FADE_MS;
+  return Math.max(0, Math.min(appear, fade));
+}
+
+// 画一个像素风的桌面图标，下面是名字（像桌面上那样带一块半透明底）
+function drawIcons(now) {
+  const dpr = world.dpr;
+  for (const icon of world.fakeIcons) {
+    const a = iconAlpha(icon, now);
+    if (a <= 0) continue;
+    const u = Math.max(1, Math.round(2.8 * dpr)); // 一格多少设备像素
+    const x0 = Math.round(icon.x * dpr - 6 * u);
+    const y0 = Math.round(icon.y * dpr - 13 * u);
+    const r = (x, y, w, h, c) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(x0 + x * u, y0 + y * u, w * u, h * u);
+    };
+    ctx.globalAlpha = a;
+    // 描一圈白边，放在什么颜色的窗口上都看得清
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(x0 - u, y0 - u, 14 * u, 14 * u);
+    if (icon.type === 'folder') {
+      r(0, 1, 5, 2, '#E3A92E');
+      r(0, 2, 12, 10, '#F5C952');
+      r(0, 4, 12, 1, '#E3B23E');
+    } else {
+      r(1, 0, 10, 12, '#FAFAFA');
+      r(8, 0, 3, 3, '#D8D8D8');
+      for (let k = 0; k < 4; k++) r(3, 4 + k * 2, k % 2 ? 5 : 6, 1, '#B8BEC9');
+      const band = { word: '#3B6FD6', js: '#E8C82E', image: '#4FAE6B', zip: '#9A6AD6', doc: '#8A93A6' }[icon.type];
+      if (band) r(1, 9, 10, 3, band);
+    }
+    // 名字
+    ctx.font = `${Math.round(10.5 * dpr)}px ${UI_FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const tw = ctx.measureText(icon.label).width;
+    const lx = icon.x * dpr;
+    const ly = y0 + 13 * u + Math.round(2 * dpr);
+    ctx.fillStyle = 'rgba(24,36,72,0.62)';
+    ctx.fillRect(Math.round(lx - tw / 2 - 3 * dpr), ly - Math.round(1 * dpr), Math.round(tw + 6 * dpr), Math.round(14 * dpr));
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(icon.label, lx, ly);
+  }
+  ctx.globalAlpha = 1;
 }
 
 // 飞着的小火箭每一帧往下喷几粒火
@@ -1128,6 +1229,9 @@ function signature(poses, views) {
     const v = views.get(p);
     s += `${Math.round(p.x * dpr)},${Math.round(p.y * dpr)},${p.P},${anim},${JSON.stringify(q)},${v ? JSON.stringify({ ...v, alpha: Math.round(v.alpha * 10) }) : ''};`;
   }
+  // 假图标淡入淡出时也要重画
+  const now = performance.now();
+  for (const icon of world.fakeIcons) s += `i${Math.round(icon.x * dpr)},${Math.round(icon.y * dpr)},${Math.round(iconAlpha(icon, now) * 20)};`;
   return s;
 }
 
@@ -1164,6 +1268,7 @@ function tick(now) {
   }
   world.particles = world.particles.filter((q) => q.life > 0);
   rocketTrails();
+  updateIcons(now);
 
   const poses = new Map(world.pets.map((p) => [p, p.pose()]));
   for (const [p, q] of poses) p.notePose(q);

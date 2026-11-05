@@ -29,6 +29,10 @@ const GLYPHS = {
   flake: ['#.#', '.#.', '#.#'],
   firefly: ['#'],
   bubble: ['.##.', '#..#', '#..#', '.##.'],
+  // 钓上来的东西
+  fish: ['.###.#', '#####.', '.###.#'],
+  bug: ['#.#', '.#.', '###', '.#.'],
+  boot: ['.##.', '.##.', '.###', '####'],
   // git 提交冒出来的勾、推送放的小火箭（见 world.js 的 stamp / rocket）
   check: ['....#', '...##', '#.##.', '###..', '.#...'],
   rocket: ['..#..', '.###.', '.#.#.', '.###.', '.###.', '##.##', '#...#'],
@@ -625,6 +629,24 @@ function drawPet(ctx, x, y, P, pal, flip, pose) {
     px(14, top + 4, 1, 1, '#F4F1EA');
     px(12, top + 3, 2, 1, '#6B4A2B');
     steam(12, top + 1);
+  }
+  // 钓鱼：手里一根鱼竿伸出去，鱼线垂到窗口下面（pose.line 是线有多长，按格算；咬钩时浮漂沉下去）
+  if (has('rod')) {
+    const R = '#8B5A3C';
+    for (let k = 0; k < 6; k++) px(14 + k, top + 4 - k, 1, 1, R);
+    const tipY = top - 1;
+    const len = Math.max(2, 10 + (pose.line || 8) - tipY);
+    px(19.4, tipY, 0.25, len, 'rgba(240,240,240,0.75)');
+    const by = tipY + len + (pose.bite ? 0.5 : 0);
+    px(19, by - 1, 1, 1, '#E5484D');
+    px(19, by, 1, 1, '#FFFFFF');
+  }
+  // 举哑铃：举起来在头顶，放下在胸前（pose.lift）
+  if (has('dumbbell')) {
+    const row = pose.lift ? top - 3 : top + 5;
+    px(1, row, 14, 1, '#6B7080');
+    px(0, row - 1, 2, 3, '#3A3F4E');
+    px(14, row - 1, 2, 3, '#3A3F4E');
   }
   // 小黄鸭调试：脚边一只小黄鸭，面朝小章鱼（坐标按地面算，不跟身体动）
   if (has('duck')) {

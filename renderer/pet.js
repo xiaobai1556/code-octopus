@@ -939,6 +939,7 @@ class Pet {
 
   behave(dt) {
     const w = this.world;
+    if (this.haulIcon && this.mode !== 'haul' && this.mode !== 'haulStart') w.releaseIcon(this);
     if (this.leaving) {
       this.mode = 'run';
       this.step(this.exitDir, RUN_SPEED * 0.6, dt, 'fall');
@@ -1007,6 +1008,47 @@ class Pet {
         break;
       case 'sleep':
         break;
+      case 'haulStart':
+        if (this.modeT <= 0) this.setMode('haul', rand(3, 6));
+        break;
+      case 'haul': {
+        // 拖着走得慢；撞墙、走到边、时间到了就松手
+        const r = this.step(this.facing, WALK_SPEED * 0.55, dt, 'turn');
+        if (this.mode !== 'haul') break;
+        if (r !== 'ok' || this.modeT <= 0) {
+          w.releaseIcon(this);
+          this.doEmote('love', 0.8);
+          this.setMode('idle', rand(1, 2));
+        }
+        break;
+      }
+      case 'fishWalk': {
+        const r = this.step(this.facing, WALK_SPEED, dt, 'turn', this.fishTarget);
+        if (this.mode !== 'fishWalk') break;
+        if (Math.abs(this.x - this.fishTarget) < 0.5) {
+          this.setMode('fish', rand(10, 16));
+          this.fishT = 0;
+          this.biteAt = rand(2.5, 4.5);
+          this.bite = 0;
+          this.caughtAt = -9;
+        } else if (r !== 'ok' || this.modeT <= 0) this.setMode('idle', rand(1, 2));
+        break;
+      }
+      case 'fish':
+        // 隔一会儿有鱼咬钩：浮漂往下沉，过一下提竿
+        this.fishT += dt;
+        if (!this.bite && this.fishT >= this.biteAt) this.bite = 0.9;
+        else if (this.bite) {
+          this.bite -= dt;
+          if (this.bite <= 0) {
+            this.bite = 0;
+            this.caughtAt = this.fishT;
+            this.biteAt = this.fishT + rand(3, 5);
+            w.catchSomething(this);
+          }
+        }
+        if (this.modeT <= 0) this.pickNext();
+        break;
       case 'bubbles':
         // 吹泡泡：隔一会儿吹出一个
         this.bubbleT -= dt;
@@ -1038,38 +1080,70 @@ class Pet {
       return;
     }
     const r = Math.random();
-    if (r < 0.3) {
+    if (r < 0.26) {
       this.setMode('idle', rand(1.5, 4.5));
-    } else if (r < 0.62) {
+    } else if (r < 0.52) {
       this.setMode('walk', rand(2, 6));
       if (this.x < w.width * 0.12) this.facing = 1;
       else if (this.x > w.width * 0.88) this.facing = -1;
       else this.facing = Math.random() < 0.5 ? -1 : 1;
       this.edgePolicy = Math.random() < 0.35 ? 'fall' : 'turn';
-    } else if (r < 0.74) {
+    } else if (r < 0.62) {
       this.jumpTarget = w.findJumpTarget(this);
       if (this.jumpTarget) this.setMode('crouch', 0.22);
       else this.setMode('idle', rand(1, 3));
-    } else if (r < 0.8) {
+    } else if (r < 0.67) {
       this.setMode('sit', rand(4, 9));
-    } else if (r < 0.84) {
+    } else if (r < 0.7) {
       this.setMode('stretch', 1.4);
-    } else if (r < 0.88) {
+    } else if (r < 0.73) {
       this.setMode('look', 2.2);
-    } else if (r < 0.92) {
+    } else if (r < 0.77) {
       this.setMode('read', rand(6, 12));
-    } else if (r < 0.94) {
+    } else if (r < 0.8) {
       this.setMode('coffee', rand(4, 7));
-    } else if (r < 0.96) {
+    } else if (r < 0.83) {
       this.setMode('game', rand(5, 9));
-    } else if (r < 0.975) {
+    } else if (r < 0.86) {
       this.setMode('duck', rand(7, 12));
-    } else if (r < 0.99) {
+    } else if (r < 0.89) {
       this.setMode('bubbles', rand(4, 7));
       this.bubbleT = 0.4;
+    } else if (r < 0.93) {
+      this.startHaul();
+    } else if (r < 0.96) {
+      if (!this.startFishing()) this.setMode('idle', rand(1, 3));
+    } else if (r < 0.98) {
+      this.setMode('workout', rand(4, 7));
     } else {
       this.setMode('dance', rand(2.5, 4));
     }
+  }
+
+  // 拖图标：身后冒出一个假的桌面图标（只是画出来的，不是你的文件），朝平台长的那边拖过去
+  startHaul() {
+    const w = this.world;
+    const seg = this.ground && this.ground.id !== 'floor' ? w.segmentAt(this.ground.id, this.x, this.edgeTolerance()) : null;
+    const l = seg ? seg.x1 : 0;
+    const r = seg ? seg.x2 : w.width;
+    this.facing = r - this.x > this.x - l ? 1 : -1;
+    w.spawnIcon(this);
+    this.setMode('haulStart', 0.8);
+  }
+
+  // 钓鱼：走到窗口边上坐下甩竿。站在屏幕底下（没有边可以钓）或者离边太远就不钓
+  startFishing() {
+    const w = this.world;
+    if (!this.ground || this.ground.id === 'floor') return false;
+    const seg = w.segmentAt(this.ground.id, this.x, this.edgeTolerance());
+    if (!seg || seg.x2 - seg.x1 < this.halfW * 3) return false;
+    const toLeft = this.x - seg.x1 < seg.x2 - this.x;
+    const target = toLeft ? seg.x1 + 6 * this.Pd : seg.x2 - 6 * this.Pd;
+    if (Math.abs(target - this.x) > 420 || target < this.halfW || target > w.width - this.halfW) return false;
+    this.fishTarget = target;
+    this.facing = toLeft ? -1 : 1;
+    this.setMode('fishWalk', 12);
+    return true;
   }
 
   // 先竖直跳到比目标高一点的地方，再横着落上去（这样不会穿过窗口侧面）
@@ -1257,9 +1331,22 @@ class Pet {
           break;
         }
       }
-    } else if (this.mode === 'walk' || this.mode === 'run') {
+    } else if (this.mode === 'walk' || this.mode === 'run' || this.mode === 'haul' || this.mode === 'fishWalk') {
       p.legs = Math.floor(this.walkDist / (this.Pd * 2)) % 2 ? 'walk0' : 'walk1';
       p.dx = 1;
+      // 拖图标：后面那只手往回拽着，使劲
+      if (this.mode === 'haul') Object.assign(p, { armL: 2, eyes: Math.floor(t / 1.5) % 3 === 2 ? 'happy' : 'down', props: Math.floor(t / 2) % 3 === 1 ? ['sweat'] : [] });
+    } else if (this.mode === 'workout') {
+      // 举哑铃：举过头顶、放下，举久了冒汗
+      const up = t % 1.2 < 0.6;
+      Object.assign(p, { top: up ? 0 : 1, eyes: up ? 'down' : 'happy', armL: up ? 'high' : 5, armR: up ? 'high' : 5, props: t % 7 > 4 ? ['dumbbell', 'sweat'] : ['dumbbell'], lift: up });
+    } else if (this.mode === 'haulStart') {
+      // 回头看一眼：身后怎么冒出来一个图标
+      Object.assign(p, { eyes: 'wide', dx: -1, armL: 'high' });
+    } else if (this.mode === 'fish') {
+      // 坐在窗口边上钓鱼：咬钩时瞪眼，刚钓上来眯眼笑
+      const justCaught = this.fishT - this.caughtAt < 1;
+      Object.assign(p, { top: 2, sit: true, armR: this.bite ? 2 : 3, eyes: this.bite ? 'wide' : justCaught ? 'happy' : 'down', dx: 1, props: ['rod'], line: 9 + (this.bite ? 2 : Math.sin(t * 2) * 0.6), bite: !!this.bite });
     } else if (this.mode === 'sit') {
       const g = Math.floor(t / 1.7) % 3;
       Object.assign(p, { top: 2, sit: true, armL: 6, armR: 6, dx: g === 1 ? 1 : g === 2 ? -1 : 0 });
