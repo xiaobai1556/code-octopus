@@ -89,3 +89,16 @@ test('游戏厅的指标只记最好的那次，够了就解锁游戏成就', ()
   const prog = achievements.progress(s).find((a) => a.id === 'climber');
   assert.deepEqual([prog.game, prog.value, prog.goal, prog.unlockedAt], ['hop', 0, 300, null]);
 });
+
+test('最近 N 天：老的在前，没干活的日子补 0，跨月也对', (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: new Date(2026, 9, 31, 10, 0, 0) });
+  const s = new Stats(tmpFile());
+  s.record(ev('UserPromptSubmit'));
+  s.record(ev('PreToolUse', { toolKind: 'edit', detail: 'a.js' }));
+  t.mock.timers.tick(2 * 24 * 60 * 60 * 1000); // 11 月 2 日
+  s.record(ev('PreToolUse', { toolKind: 'shell', detail: 'ls' }));
+  const r = s.range('2026-11-02', 5);
+  assert.deepEqual(r.map((d) => d.date), ['2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
+  assert.deepEqual(r.map((d) => d.tools), [0, 0, 1, 0, 1]);
+  assert.equal(s.range('2026-11-02').length, 30);
+});

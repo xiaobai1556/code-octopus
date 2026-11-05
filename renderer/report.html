@@ -67,6 +67,22 @@
       <footer id="footer"></footer>
     </article>
 
+    <!-- 最近 30 天的趋势：放在日报卡片外面，复制 / 保存的图片还是那张日报 -->
+    <section id="trend">
+      <div class="trend-head">
+        <h2 id="trend-title"></h2>
+        <div class="seg" id="trend-metric" role="group"></div>
+      </div>
+      <div class="trend-stats" id="trend-stats"></div>
+      <div class="trend-plot">
+        <div class="trend-bars" id="trend-bars"></div>
+        <div class="trend-avg" id="trend-avg" hidden><span></span></div>
+        <div class="trend-tip" id="trend-tip" hidden></div>
+      </div>
+      <div class="trend-ticks" id="trend-ticks"></div>
+      <p class="trend-hint" id="trend-hint"></p>
+    </section>
+
     <script src="../src/i18n.js"></script>
     <script src="../src/outfits.js"></script>
     <script src="sprite.js"></script>

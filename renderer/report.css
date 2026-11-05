@@ -325,3 +325,156 @@ select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ---------- 最近 30 天：单色柱，今天（正在看的那天）深一点；悬停看数值，点一下看那天的日报 ---------- */
+#trend {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 24px 12px;
+  max-width: 560px;
+  margin: 14px auto 0;
+  box-shadow: 0 6px 24px rgba(60, 40, 20, 0.08);
+}
+.trend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.trend-head h2 {
+  margin: 0;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px;
+  background: #fff;
+}
+.seg button {
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.seg button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.trend-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.trend-stats .stat {
+  padding: 6px 10px;
+}
+.trend-stats .num {
+  font-size: 15px;
+}
+.trend-plot {
+  position: relative;
+  height: 96px;
+  margin-top: 30px; /* 最高那根的标注和悬停提示放在这段空里，不盖住上面的数字 */
+}
+.trend-bars {
+  display: grid;
+  grid-template-columns: repeat(30, 1fr);
+  gap: 2px;
+  align-items: end;
+  height: 100%;
+  border-bottom: 1px solid var(--line);
+}
+/* 每根柱子是一个按钮：整列都能点（比柱子本身大），柱子画在 ::after 里 */
+.trend-bars button {
+  position: relative;
+  height: 100%;
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+.trend-bars button::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--h);
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent);
+  opacity: 0.55;
+}
+.trend-bars button.zero::after {
+  background: var(--line);
+  opacity: 1;
+}
+.trend-bars button.cur::after {
+  opacity: 1;
+}
+.trend-bars button:hover::after,
+.trend-bars button:focus-visible::after {
+  opacity: 1;
+  background: #c2410c;
+}
+.trend-bars button b {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--h) + 3px);
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.trend-avg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--muted);
+  pointer-events: none;
+}
+.trend-avg span {
+  position: absolute;
+  right: 0;
+  top: -15px;
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--card);
+  padding: 0 3px;
+}
+.trend-tip {
+  position: absolute;
+  top: -4px;
+  transform: translate(-50%, -100%);
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.trend-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.trend-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: right;
+}

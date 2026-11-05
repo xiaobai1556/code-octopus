@@ -101,6 +101,18 @@ class Stats {
     return Object.keys(this.data.days).sort();
   }
 
+  // 截至 endKey 这天的最近 n 天（老的在前）：每天的忙碌时长、工具调用、花费，没干活的那天是 0
+  range(endKey, n = 30) {
+    const [y, m, d] = endKey.split('-').map(Number);
+    const out = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const key = dayKey(new Date(y, m - 1, d - i));
+      const day = this.data.days[key];
+      out.push({ date: key, busyMs: day ? day.busyMs : 0, tools: day ? day.toolCount : 0, costUSD: day ? day.costUSD || 0 : 0 });
+    }
+    return out;
+  }
+
   // ev：summarize 之后的事件；costUSD：这个会话目前累计花费（读不到就是 null）
   record(ev, costUSD = null) {
     const now = new Date();

@@ -1418,7 +1418,7 @@ function openReport(date) {
 function registerReportIpc() {
   ipcMain.handle('report:get', (_e, date) => {
     const key = date || dayKey();
-    return { date: key, today: dayKey(), day: stats.get(key), dates: stats.dates(), locale: locale(), color: config.color, outfit: OUTFITS.effective(config.outfit, config.holidays) };
+    return { date: key, today: dayKey(), day: stats.get(key), dates: stats.dates(), trend: stats.range(key, 30), locale: locale(), color: config.color, outfit: OUTFITS.effective(config.outfit, config.holidays) };
   });
   // 截取卡片那一块：复制到剪贴板，或者存到 图片\Code Octopus 里
   const capture = (rect) => reportWin.webContents.capturePage(rect && rect.width ? rect : undefined);

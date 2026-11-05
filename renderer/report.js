@@ -158,6 +158,94 @@ async function load(date) {
   data = await api.get(date);
   I18N.setLang(data.locale);
   render();
+  renderTrend();
+}
+
+// ---------- 最近 30 天 ----------
+// 一次看一个指标（单色柱，没有图例，标题就是名字）；正在看的那天深一点，最高的那根标上数，虚线是干活日的平均；
+// 鼠标指着看具体数值，点一下跳到那天的日报
+const TREND = {
+  busy: { key: 'busyMs', label: 'rep.busy', fmt: (v) => fmtDuration(v), short: (v) => tr('rep.hShort', { n: +(v / 3600e3).toFixed(1) }) },
+  tools: { key: 'tools', label: 'rep.tools', fmt: (v) => String(Math.round(v)), short: (v) => String(Math.round(v)) },
+  cost: { key: 'costUSD', label: 'rep.cost', fmt: (v) => fmtCost(v), short: (v) => fmtCost(v) },
+};
+let trendMetric = 'busy';
+try {
+  if (TREND[localStorage.getItem('report-trend')]) trendMetric = localStorage.getItem('report-trend');
+} catch {}
+
+const shortDate = (key) => {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Intl.DateTimeFormat(data.locale, { month: 'numeric', day: 'numeric', weekday: 'short' }).format(new Date(y, m - 1, d));
+};
+const tickDate = (key) => key.slice(5).replace('-', '/').replace(/^0/, '').replace('/0', '/');
+
+function renderTrend() {
+  const days = data.trend || [];
+  const m = TREND[trendMetric];
+  $('trend-title').textContent = tr('rep.trend');
+  $('trend-metric').replaceChildren(
+    ...Object.entries(TREND).map(([id, def]) => {
+      const b = el('button', id === trendMetric ? 'on' : '', tr(def.label));
+      b.setAttribute('aria-pressed', String(id === trendMetric));
+      b.onclick = () => {
+        trendMetric = id;
+        try {
+          localStorage.setItem('report-trend', id);
+        } catch {}
+        renderTrend();
+      };
+      return b;
+    })
+  );
+
+  const values = days.map((d) => d[m.key] || 0);
+  const total = values.reduce((a, b) => a + b, 0);
+  const active = values.filter((v) => v > 0).length;
+  const max = Math.max(0, ...values);
+  const bestIdx = max > 0 ? values.indexOf(max) : -1;
+  const avg = active ? total / active : 0;
+  $('trend-stats').replaceChildren(
+    stat(total ? m.fmt(total) : '—', tr('rep.total')),
+    stat(tr('rep.daysValue', { n: active }), tr('rep.activeDays')),
+    stat(avg ? m.fmt(avg) : '—', tr('rep.avg')),
+    stat(bestIdx >= 0 ? tickDate(days[bestIdx].date) : '—', tr('rep.bestDay'))
+  );
+
+  const tip = $('trend-tip');
+  const show = (btn, d, v) => {
+    tip.textContent = `${shortDate(d.date)} · ${v ? m.fmt(v) : '—'}`;
+    tip.style.left = `${btn.offsetLeft + btn.offsetWidth / 2}px`;
+    tip.hidden = false;
+  };
+  const hide = () => (tip.hidden = true);
+  $('trend-bars').replaceChildren(
+    ...days.map((d, i) => {
+      const v = values[i];
+      const b = el('button', [v ? '' : 'zero', d.date === data.date ? 'cur' : ''].filter(Boolean).join(' '));
+      b.style.setProperty('--h', `${max ? (v / max) * 100 : 0}%`);
+      b.setAttribute('aria-label', `${shortDate(d.date)} ${v ? m.fmt(v) : '—'}`);
+      if (i === bestIdx) b.append(el('b', '', m.short(v))); // 只标最高的那根
+      b.onmouseenter = b.onfocus = () => show(b, d, v);
+      b.onmouseleave = b.onblur = hide;
+      b.onclick = () => {
+        hide();
+        load(d.date);
+      };
+      return b;
+    })
+  );
+  hide();
+
+  const line = $('trend-avg');
+  line.hidden = !(avg && max);
+  if (avg && max) {
+    line.style.bottom = `${(avg / max) * 100}%`;
+    line.firstElementChild.textContent = tr('rep.avgLine', { v: m.short(avg) });
+  }
+  const ticks = days.length ? [days[0], days[Math.floor(days.length / 2)], days[days.length - 1]] : [];
+  $('trend-ticks').replaceChildren(...ticks.map((d) => el('span', '', tickDate(d.date))));
+  $('trend-hint').textContent = tr(total ? 'rep.trendHint' : 'rep.trendEmpty');
 }
 
 function cardRect() {
@@ -197,6 +285,17 @@ window.addEventListener('focus', () => {
 });
 
 // ---------- 不在 Electron 里时的假数据，方便看界面 ----------
+function mockTrend(end) {
+  const [y, m, d] = end.split('-').map(Number);
+  return Array.from({ length: 30 }, (_, i) => {
+    const day = new Date(y, m - 1, d - 29 + i);
+    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+    const off = day.getDay() === 0 || day.getDay() === 6 ? 0.25 : 1;
+    const busy = Math.max(0, Math.round((Math.sin(i * 1.7) * 0.5 + 0.7) * off * 4 * 3600e3 * (i % 9 === 4 ? 0 : 1)));
+    return { date: key, busyMs: busy, tools: Math.round(busy / 3600e3 * 140), costUSD: +(busy / 3600e3 * 3.1).toFixed(2) };
+  });
+}
+
 function mockApi() {
   const today = '2026-10-08';
   const day = {
@@ -217,7 +316,7 @@ function mockApi() {
     costUSD: 18.42,
   };
   return {
-    get: async (date) => ({ date: date || today, today, day: (date || today) === today ? day : null, dates: ['2026-10-07', today], locale: I18N.detect(navigator.languages), color: 0 }),
+    get: async (date) => ({ date: date || today, today, day: (date || today) === today ? day : null, dates: ['2026-10-07', today], trend: mockTrend(date || today), locale: I18N.detect(navigator.languages), color: 0 }),
     copy: async () => true,
     save: async () => '',
   };
