@@ -102,3 +102,12 @@ test('最近 N 天：老的在前，没干活的日子补 0，跨月也对', (t)
   assert.deepEqual(r.map((d) => d.tools), [0, 0, 1, 0, 1]);
   assert.equal(s.range('2026-11-02').length, 30);
 });
+
+test('游戏厅的每一局也记到当天：几局、最高分', () => {
+  const s = new Stats(tmpFile());
+  s.recordGame('bugs', 120);
+  s.recordGame('bugs', 340.7);
+  s.recordGame('bugs', 90);
+  s.recordGame('hop', -3);
+  assert.deepEqual(s.get(dayKey()).games, { bugs: { plays: 3, best: 340 }, hop: { plays: 1, best: 0 } });
+});

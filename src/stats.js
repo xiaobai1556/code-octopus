@@ -200,6 +200,15 @@ class Stats {
     return { turnMs };
   }
 
+  // 游戏厅一局结束，记到今天：玩了几局、最高分（日报里显示）
+  recordGame(game, score) {
+    const games = (this.day().games ||= {});
+    const g = (games[game] ||= { plays: 0, best: 0 });
+    g.plays++;
+    g.best = Math.max(g.best, Math.max(0, Math.floor(Number(score) || 0)));
+    this.scheduleSave();
+  }
+
   // 游戏厅一局结束：每个指标记最好的那次（捉虫的轮数、窗口跳跳的米数、连对条数、塔防守住的波数）
   recordArcade(game, metrics) {
     const all = (this.data.arcade ||= {});

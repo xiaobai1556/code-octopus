@@ -1497,6 +1497,7 @@ function registerArcadeIpc() {
       if (Number.isFinite(v) && v > 0) clean[key] = Math.min(v, 1_000_000);
     }
     stats.recordArcade(game, clean);
+    stats.recordGame(game, score);
     // 解锁了成就：桌面上的小章鱼来庆祝（顺手穿上新装扮）；没有成就但破了以前的纪录（第一局不算）：也来庆祝一下
     const fresh = achievements.evaluate(stats);
     if (fresh.length) unlock(fresh, cursorOverlay());

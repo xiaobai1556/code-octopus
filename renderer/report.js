@@ -150,6 +150,18 @@ function render() {
   $('files-title').textContent = tr('rep.topFiles');
   topList($('files'), d.files);
 
+  // 这一天在游戏厅里玩了什么：几局、最高分
+  const games = Object.entries(d.games || {}).sort((a, b) => b[1].plays - a[1].plays);
+  $('games-block').hidden = !games.length;
+  $('games-title').textContent = tr('rep.games');
+  $('games').replaceChildren(
+    ...games.map(([id, g]) => {
+      const li = el('li', '', tr(`${id}.name`));
+      li.append(el('span', '', tr('rep.gameLine', { n: g.plays, best: g.best })));
+      return li;
+    })
+  );
+
   paint($('mini'), 32, 22, 2, palette, { eyes: 'happy', blush: true });
   $('mood').textContent = mood(d);
 }
@@ -314,6 +326,7 @@ function mockApi() {
     projects: { 'claude-pet': 720, forge: 96, 'claude-journey': 42 },
     hours: [0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 40, 66, 21, 8, 52, 97, 120, 88, 30, 14, 61, 79, 34, 0],
     costUSD: 18.42,
+    games: { bugs: { plays: 3, best: 840 }, defense: { plays: 1, best: 2310 } },
   };
   return {
     get: async (date) => ({ date: date || today, today, day: (date || today) === today ? day : null, dates: ['2026-10-07', today], trend: mockTrend(date || today), locale: I18N.detect(navigator.languages), color: 0 }),
