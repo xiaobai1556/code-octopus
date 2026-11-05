@@ -635,6 +635,11 @@ const world = {
       this.particles.push({ kind: 'square', x: pet.x + rand(-6, 6), y: pet.y - pet.height * 0.45, vx: rand(-90, 90), vy: rand(-200, -60), g: 900, life: rand(0.5, 0.9), max: 0.9, size: pet.Pd * 0.5, color: pick(['#F4F1EA', '#C9B8A3', '#FFE066']) });
     }
   },
+  // 吹泡泡：从小棒那儿飘出去，慢慢往上飘、左右晃
+  soapBubble(pet) {
+    const colors = ['#BFE6FF', '#E6CCFF', '#CCF5E1', '#FFE0F0'];
+    this.particles.push({ kind: 'bubble', x: pet.x + pet.facing * (pet.halfW + pet.Pd), y: pet.y - pet.height - pet.Pd, vx: pet.facing * rand(14, 30), vy: rand(-26, -12), g: -6, sway: 18, phase: rand(0, 6), life: rand(2.2, 3.4), max: 3.4, size: pet.Pd * rand(0.55, 0.8), color: pick(colors), outline: 'rgba(255,255,255,0.85)' });
+  },
   // git 提交：身边冒一个绿色的勾（头顶是气泡，会挡住），再撒几颗星星
   stamp(pet) {
     this.particles.push({ kind: 'check', x: pet.x + pet.facing * (pet.halfW + pet.Pd * 4), y: pet.y - pet.height * 0.6, vx: pet.facing * 6, vy: -22, g: 0, life: 1.6, max: 1.6, size: pet.Pd * 0.9, color: '#3F9A5B' });
@@ -1102,7 +1107,7 @@ function drawOrder() {
 //（高刷屏上 requestAnimationFrame 可能是 144/240Hz，不能每次都画）。
 // 模拟也一样：不拖着、不在空中、不被窗口带着走时，离上一次不到 12ms 就跳过，高刷屏上也只跑 60~80 次每秒
 const TICK_MIN_MS = 12;
-const SLOW_PARTICLES = new Set(['z', 'note', 'petal', 'leaf', 'flake', 'firefly']);
+const SLOW_PARTICLES = new Set(['z', 'note', 'petal', 'leaf', 'flake', 'firefly', 'bubble']);
 const SLOW_DRAW_MS = 66;
 let last = performance.now();
 let lastDraw = 0;

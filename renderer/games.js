@@ -8,7 +8,7 @@ const VISITOR_GAP = [3, 7]; // 有小伙伴在的时候，两局之间只歇一�
 const MAX_VISITORS = 4;
 const VISITOR_STAY = [100, 160]; // 小伙伴待多少秒
 const BALL_G = 1500;
-const FREE_MODES = new Set(['idle', 'walk', 'sit', 'look', 'stretch', 'dance', 'read', 'coffee', 'game']);
+const FREE_MODES = new Set(['idle', 'walk', 'sit', 'look', 'stretch', 'dance', 'read', 'coffee', 'game', 'duck', 'bubbles']);
 const lerp = (a, b, k) => a + (b - a) * k;
 
 const games = {

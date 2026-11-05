@@ -1007,6 +1007,15 @@ class Pet {
         break;
       case 'sleep':
         break;
+      case 'bubbles':
+        // 吹泡泡：隔一会儿吹出一个
+        this.bubbleT -= dt;
+        if (this.bubbleT <= 0) {
+          this.bubbleT = rand(0.45, 0.9);
+          w.soapBubble(this);
+        }
+        if (this.modeT <= 0) this.pickNext();
+        break;
       default:
         if (this.modeT <= 0) this.pickNext();
     }
@@ -1049,10 +1058,15 @@ class Pet {
       this.setMode('look', 2.2);
     } else if (r < 0.92) {
       this.setMode('read', rand(6, 12));
-    } else if (r < 0.95) {
+    } else if (r < 0.94) {
       this.setMode('coffee', rand(4, 7));
-    } else if (r < 0.98) {
+    } else if (r < 0.96) {
       this.setMode('game', rand(5, 9));
+    } else if (r < 0.975) {
+      this.setMode('duck', rand(7, 12));
+    } else if (r < 0.99) {
+      this.setMode('bubbles', rand(4, 7));
+      this.bubbleT = 0.4;
     } else {
       this.setMode('dance', rand(2.5, 4));
     }
@@ -1257,6 +1271,15 @@ class Pet {
       // 端着咖啡，时不时喝一口
       const sip = t % 2.2 < 0.6;
       Object.assign(p, { eyes: sip ? 'happy' : 'open', armR: sip ? 2 : 4, blush: sip, top: breathe ? 1 : 0, props: [sip ? 'mugUp' : 'mug'] });
+    } else if (this.mode === 'duck') {
+      // 小黄鸭调试：坐着对鸭子比划着讲代码，讲一会儿停下来想一想
+      const k = t % 4;
+      if (k < 2.6) Object.assign(p, { top: 2, sit: true, dx: 1, armL: 5, armR: Math.floor(t * 3) % 2 ? 'high' : 4, props: ['duck'] });
+      else Object.assign(p, { top: 2, sit: true, eyes: 'down', armL: 5, armR: 5, props: ['duck', 'dots'] });
+    } else if (this.mode === 'bubbles') {
+      // 吹泡泡：举着小棒，吹的时候鼓起嘴
+      const blow = (this.bubbleT || 0) > 0.3;
+      Object.assign(p, { top: breathe ? 1 : 0, eyes: blow ? 'happy' : 'open', armR: 2, mouth: blow ? '' : 'open', props: ['wand'] });
     } else if (this.mode === 'game') {
       // 打掌机，按键按得飞快
       const tap = Math.floor(t * 6) % 2;
