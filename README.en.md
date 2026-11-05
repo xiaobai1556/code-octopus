@@ -72,7 +72,22 @@ This creates `Code-Octopus-Setup-<version>.exe` in `dist/` (an NSIS installer th
 
 The installed version and the development version share one data folder (`%APPDATA%\claude-pet`, the name from before the rename, kept so existing users don't lose their settings and stats), so settings, stats and achievements carry over. They also share the single-instance lock, so the two never run at the same time.
 
-**Auto update**: the installed version checks GitHub Releases for new versions, downloads them in the background and installs on quit. The repository it checks is set in `src/release.json`; it's currently `xiaobai1556/code-octopus` (if it's still the placeholder `YOUR_GITHUB_NAME`, builds won't check for updates). To publish a release, run `electron-builder --config electron-builder.config.js --win --publish always` (needs `GH_TOKEN`) to upload the installer and `latest.yml` to Releases.
+**Auto update**: the installed version checks GitHub Releases for new versions, downloads them in the background and installs on quit. The repository it checks is set in `src/release.json`; it's currently `xiaobai1556/code-octopus` (if it's still the placeholder `YOUR_GITHUB_NAME`, builds won't check for updates). To publish a release:
+
+1. Bump `version` in `package.json` (say, to `0.4.0`), commit and push
+2. Push a tag with the same version. The "Release" GitHub Actions workflow runs the tests on Windows, builds the installer and uploads it with `latest.yml` to a draft on the Releases page (it fails right away if the tag and the version don't match):
+
+   ```bash
+   git tag v0.4.0
+   ```
+
+   ```bash
+   git push origin v0.4.0
+   ```
+
+3. Open the draft on the Releases page, write a few lines about what changed and click "Publish release". Auto update can't see drafts; people on older versions get the update once it's published
+
+To just check that packaging works, pick "Release" → "Run workflow" on the Actions page. It only builds, puts the installer in that run's Artifacts and leaves Releases alone. You can also publish by hand from your own machine with `electron-builder --config electron-builder.config.js --win --publish always` (needs `GH_TOKEN`).
 
 Once it's running there's an octopus icon in the tray at the bottom right: **left-click** opens the settings panel and **right-click** opens the quick menu. While the pet is running, `npm run settings` also opens the settings panel and `npm run arcade` opens the Octopus Arcade.
 

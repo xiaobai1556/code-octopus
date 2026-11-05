@@ -69,7 +69,22 @@ npm run dist
 
 安装版和开发版用同一个数据目录（`%APPDATA%\claude-pet`，改名前就叫这个，没改是为了老用户的设置和统计不丢），设置、统计、成就都通用；单实例锁也是同一个，不会同时开两个。
 
-**自动更新**：安装版会从 GitHub Releases 检查新版本、后台下载、退出时安装。发布到哪个仓库写在 `src/release.json`；现在是 `xiaobai1556/code-octopus`（如果还是占位符 `YOUR_GITHUB_NAME`，打出来的包不会去检查更新）。发新版本时用 `electron-builder --config electron-builder.config.js --win --publish always`（需要 `GH_TOKEN`）把安装包和 `latest.yml` 发到 Releases。
+**自动更新**：安装版会从 GitHub Releases 检查新版本、后台下载、退出时安装。发布到哪个仓库写在 `src/release.json`；现在是 `xiaobai1556/code-octopus`（如果还是占位符 `YOUR_GITHUB_NAME`，打出来的包不会去检查更新）。发新版本：
+
+1. 改 `package.json` 里的 `version`（比如改成 `0.4.0`），提交并推送
+2. 推一个同名的标签，GitHub Actions 的「Release」工作流会在 Windows 上跑测试、打包，把安装包和 `latest.yml` 传到 Releases 的一份草稿里（标签和版本号对不上会直接失败）：
+
+   ```bash
+   git tag v0.4.0
+   ```
+
+   ```bash
+   git push origin v0.4.0
+   ```
+
+3. 到 GitHub 的 Releases 页面打开那份草稿，写几句更新内容，点「Publish release」。草稿对自动更新不可见，发布之后装了旧版的人才会收到
+
+只想试试打包有没有问题：在 Actions 页面选「Release」→「Run workflow」，它只打包，安装包在那次运行的 Artifacts 里，不碰 Releases。在自己电脑上也可以用 `electron-builder --config electron-builder.config.js --win --publish always`（需要 `GH_TOKEN`）手动发。
 
 启动后右下角托盘里会有小章鱼图标：**左键**打开设置面板，**右键**弹出快捷菜单。桌宠已经在运行时，`npm run settings` 也会打开设置面板，`npm run arcade` 打开章鱼游戏厅。
 
