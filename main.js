@@ -739,6 +739,31 @@ function onHookRequest(url, text, remotePort) {
   if (stats) checkLevel(target, ev.sessionId);
 }
 
+// /summary 的内容：今天的数字、等级、钓鱼图鉴
+function todaySummary() {
+  const d = (stats && stats.get(dayKey())) || null;
+  const lv = LEVEL.levelOf(LEVEL.xpOf(stats ? stats.data.totals : {}));
+  const h = Math.floor(((d && d.busyMs) || 0) / 3600000);
+  const m = Math.round((((d && d.busyMs) || 0) % 3600000) / 60000);
+  return {
+    app: 'code-octopus',
+    date: dayKey(),
+    busy: `${h}h ${m}m`,
+    messages: (d && d.prompts) || 0,
+    toolCalls: (d && d.toolCount) || 0,
+    testsPassed: (d && d.tests.pass) || 0,
+    testsFailed: (d && d.tests.fail) || 0,
+    commits: (d && d.commits) || 0,
+    pushes: (d && d.pushes) || 0,
+    lastCommits: ((d && d.commitLog) || []).slice(-3).map((c) => c.text).filter(Boolean),
+    costUSD: Math.round(((d && d.costUSD) || 0) * 100) / 100,
+    level: lv.level,
+    title: tr(`level.${lv.title}`),
+    xp: `${lv.xp} / ${lv.next}`,
+    language: locale(),
+  };
+}
+
 // 养成等级：经验涨过了下一级，让那只小章鱼庆祝一下。第一次（还没记过等级）只记下来，不补庆祝
 function checkLevel(target, sessionId) {
   const lv = LEVEL.levelOf(LEVEL.xpOf(stats.data.totals));
@@ -1098,6 +1123,19 @@ function startServer() {
           res.end();
         }
       });
+      return;
+    }
+    // 插件里的 /octopus：今天的小结（给 Claude 读的 JSON，它再用你的语言说给你听）
+    if (req.method === 'GET' && req.url === '/summary') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(todaySummary()));
+      return;
+    }
+    // 插件里的 /octopus-party：让小章鱼撒一次彩纸
+    if (req.method === 'POST' && req.url === '/party') {
+      sendTo(cursorOverlay(), 'party');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{"ok":true}');
       return;
     }
     if (req.method === 'GET' && req.url === '/ping') {

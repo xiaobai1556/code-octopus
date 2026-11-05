@@ -1697,6 +1697,14 @@ if (host) {
     world.transfer(pet, to, { drag: d });
   });
   host.on('achievement', ({ ids, items, sessionId }) => world.messenger(sessionId).celebrateUnlock(ids, items));
+  // 插件里的 /octopus-party：撒彩纸
+  host.on('party', () => {
+    const pet = world.messenger();
+    pet.touch();
+    pet.doEmote(Math.random() < 0.5 ? 'cheer' : 'pump', 2);
+    world.confetti(pet);
+    pet.say(tr('say.party'), 2.4);
+  });
   // 休息提醒：端一杯水过来
   host.on('break-reminder', ({ minutes }) => world.messenger().offerWater(minutes));
   // 养成等级升级：撒彩纸，说升到几级、现在是什么称号

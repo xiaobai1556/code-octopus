@@ -116,7 +116,12 @@ claude plugin install code-octopus@code-octopus
 
 Both send exactly the same hooks: curl POSTs Claude Code's events to `http://127.0.0.1:23333/event`, asynchronously (`async: true`), so Claude isn't slowed down. When the pet isn't running, curl can't connect and fails silently.
 
-Permission requests (`PermissionRequest`) are the one exception: that's a synchronous `http` hook to `/permission`. Claude Code ignores decisions returned by async hooks, so this is the only way "Approve from the pet" can work. With the feature off, the pet answers right away with an empty response; with the pet not running, the connection fails. Either way Claude Code asks you in the terminal as usual. If you're upgrading from an older version, the settings panel shows "Update": for the plugin, click "Update" (plugin version 0.3.0; from 0.3.0 the plugin is called `code-octopus`, and if you still have the old `claude-pet` plugin, one click on "Update" swaps it for the new one); for settings.json, click "Update" to reconnect. The plugin's `plugin/hooks/hooks.json` is generated from `src/hooks.js` by `npm run build:plugin`.
+Permission requests (`PermissionRequest`) are the one exception: that's a synchronous `http` hook to `/permission`. Claude Code ignores decisions returned by async hooks, so this is the only way "Approve from the pet" can work. With the feature off, the pet answers right away with an empty response; with the pet not running, the connection fails. Either way Claude Code asks you in the terminal as usual. If you're upgrading from an older version, the settings panel shows "Update": for the plugin, click "Update" (plugin version 0.4.0, which adds the two commands below; from 0.3.0 the plugin is called `code-octopus`, and if you still have the old `claude-pet` plugin, one click on "Update" swaps it for the new one); for settings.json, click "Update" to reconnect. The plugin's `plugin/hooks/hooks.json` is generated from `src/hooks.js` by `npm run build:plugin`.
+
+The plugin also brings two slash commands (plugin method only, not settings.json):
+
+- `/octopus`: today's summary inside Claude Code. The command asks the pet on this machine for today's numbers with curl (busy time, tool calls, tests, commits, cost, level) and Claude tells you in your language; if the pet isn't running, it says so
+- `/octopus-party`: makes the octopus on your desktop throw confetti
 
 ## Uninstall
 

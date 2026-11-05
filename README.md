@@ -113,7 +113,12 @@ claude plugin install code-octopus@code-octopus
 
 两种方式发出的 hook 完全一样：用 curl 把 Claude Code 的事件 POST 到 `http://127.0.0.1:23333/event`，并且是异步的（`async: true`），不会拖慢 Claude；桌宠没开的时候 curl 连不上，也只是静默失败。
 
-只有权限请求（`PermissionRequest`）不一样：它是同步的 `http` hook，打到 `/permission`。异步 hook 返回的决定会被 Claude Code 忽略，所以"在桌宠上批准"只能这样做。没开这个功能时桌宠马上回空响应；桌宠没开时连不上，Claude Code 都照常在终端里问你。从旧版升级上来的，设置面板会提示"更新"：插件点「更新」（插件版本 0.3.0；0.3.0 起插件改名 `code-octopus`，装着旧的 `claude-pet` 插件的点一次「更新」会自动换成新的），settings.json 点「更新」重新接入一次。插件里的 `plugin/hooks/hooks.json` 由 `npm run build:plugin` 从 `src/hooks.js` 生成。
+只有权限请求（`PermissionRequest`）不一样：它是同步的 `http` hook，打到 `/permission`。异步 hook 返回的决定会被 Claude Code 忽略，所以"在桌宠上批准"只能这样做。没开这个功能时桌宠马上回空响应；桌宠没开时连不上，Claude Code 都照常在终端里问你。从旧版升级上来的，设置面板会提示"更新"：插件点「更新」（插件版本 0.4.0，加了下面两个命令；0.3.0 起插件改名 `code-octopus`，装着旧的 `claude-pet` 插件的点一次「更新」会自动换成新的），settings.json 点「更新」重新接入一次。插件里的 `plugin/hooks/hooks.json` 由 `npm run build:plugin` 从 `src/hooks.js` 生成。
+
+插件还带两个斜杠命令（只有插件方式有，settings.json 方式没有）：
+
+- `/octopus`：在 Claude Code 里看今天的小结。命令用 curl 向本机的桌宠要今天的数字（忙碌时长、工具调用、测试、提交、花费、等级），Claude 再用你的语言说给你听；桌宠没开时会告诉你它没在运行
+- `/octopus-party`：让桌面上的小章鱼撒一次彩纸
 
 ## 卸载
 
