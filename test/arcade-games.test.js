@@ -246,6 +246,8 @@ const PROBES = {
   stack: (game, log) => game.slider && fresh(log, [game.slider]).forEach((sl) => log.push(`${sl.name}<${sl.from}`)),
   // 排好的每一个：哪个格子、什么
   whack: (game, log) => fresh(log, game.planned).forEach((p) => log.push(`${p.cell}:${p.kind}`)),
+  // 排好的每一个包：原定的格子、名字、种类（格子被占着往后挪不算）
+  deps: (game, log) => fresh(log, game.planned).forEach((f) => log.push(`${f.planIdx}:${f.pkg[0]}:${f.kind}`)),
 };
 
 for (const id of GAMES) {

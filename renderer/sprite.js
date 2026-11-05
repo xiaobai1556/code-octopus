@@ -128,6 +128,13 @@ function drawHead(px, blob, item, top, grow, t) {
       px(13, r(1), 1, 1, K);
       break;
     }
+    case 'boxhat':
+      // 依赖膨胀的成就：头上顶一个纸箱，中间一道胶带，箱盖翘起来一点
+      px(4, r(4), 8, 4, '#B98A55');
+      px(4, r(4), 8, 1, '#CDA06A');
+      px(7, r(4), 2, 4, '#E6CFA0');
+      px(3, r(5), 2, 1, '#CDA06A'); // 翘起来的箱盖
+      break;
     case 'firehelmet':
       // 热修复的成就：红色消防头盔，前面一块金色徽章，后沿长一点
       px(5, r(3), 6, 1, '#D63B2F');

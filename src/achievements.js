@@ -23,6 +23,7 @@ const LIST = [
   { id: 'typist', game: 'typing', item: 'visor', goal: 40, value: (s) => arcade(s, 'typing', 'wpm') }, // 敲代码 40 WPM
   { id: 'deepstack', game: 'stack', item: 'monocle', goal: 30, value: (s) => arcade(s, 'stack', 'depth') }, // 调用栈叠到 30 层
   { id: 'firefighter', game: 'whack', item: 'firehelmet', goal: 65, value: (s) => arcade(s, 'whack', 'fixed') }, // 热修复一局修 65 个
+  { id: 'hoarder', game: 'deps', item: 'boxhat', goal: 35, value: (s) => arcade(s, 'deps', 'length') }, // 依赖膨胀拖着 35 个包
 ];
 
 // 游戏厅里最好的一次（stats.data.arcade，见 Stats.recordArcade）
