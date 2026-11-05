@@ -42,6 +42,7 @@ test('strip：只删桌宠的，删空了的事件和 hooks 字段一起去掉',
 
 test('插件里的 hooks.json 和 src/hooks.js 同步（改了 hooks.js 要跑 npm run build:plugin）', () => {
   const expected = JSON.stringify(withHooks({}, 23333, 'claude-pet-plugin'), null, 2) + '\n';
-  const actual = fs.readFileSync(path.join(__dirname, '..', 'plugin', 'hooks', 'hooks.json'), 'utf8');
+  // Windows 上 git 可能把换行转成 CRLF，比内容不比换行
+  const actual = fs.readFileSync(path.join(__dirname, '..', 'plugin', 'hooks', 'hooks.json'), 'utf8').replace(/\r\n/g, '\n');
   assert.equal(actual, expected);
 });

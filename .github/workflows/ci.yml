@@ -1,0 +1,22 @@
+# 每次推送和 PR 都在 Windows 上跑一遍单元测试（测试不需要 Electron，装依赖时跳过下载 Electron 的安装脚本）
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      # 插件里的 hooks.json 要和 src/hooks.js 生成的一样（测试里也查了，这里再生成一遍确认没有改动）
+      - run: npm run build:plugin
+      - run: git diff --exit-code plugin/hooks/hooks.json
