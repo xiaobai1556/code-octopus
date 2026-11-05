@@ -334,6 +334,12 @@ function renderPlay() {
   const { config } = state;
   $('dance').setAttribute('aria-checked', String(config.dance !== false));
   $('time-of-day').setAttribute('aria-checked', String(config.timeOfDay !== false));
+  $('hotkeys').setAttribute('aria-checked', String(!!config.hotkeys));
+  // 打开了但有的快捷键被别的程序占了：说是哪个
+  const taken = Object.entries(state.hotkeys || {}).filter(([, ok]) => !ok).map(([name]) => ({ summon: 'Ctrl+Alt+O', arcade: 'Ctrl+Alt+G' })[name]);
+  const st = $('hotkeys-status');
+  st.hidden = !config.hotkeys || !taken.length;
+  if (taken.length) setStatus(st, false, tr('set.hotkeyTaken', { keys: taken.join(tr('punct.listSep')) }));
   $('pomodoro').replaceChildren(
     ...[15, 25, 45].map((m) => {
       const b = document.createElement('button');
@@ -487,7 +493,7 @@ function render() {
   if (changed('wardrobe', [state.config.outfit, state.config.holidays, state.config.color, state.holiday, state.achievements])) renderWardrobe();
   if (changed('achievements', [state.achievements, state.config.color])) renderAchievements();
   if (changed('feed', [state.config.feed, state.config.feedHint, state.config.feedDir, state.lastBite])) renderFeed();
-  if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin])) renderPlay();
+  if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin, state.config.hotkeys, state.hotkeys])) renderPlay();
   if (changed('updates', [state.update, state.config.autoUpdate])) renderUpdates();
   if (changed('pets', state.pets)) renderPets();
   if (changed('events', state.events)) renderEvents();
@@ -518,6 +524,7 @@ $('holidays').onclick = () => update({ holidays: state.config.holidays === false
 $('approve').onclick = () => update({ approveOnPet: !state.config.approveOnPet });
 $('dance').onclick = () => update({ dance: state.config.dance === false });
 $('time-of-day').onclick = () => update({ timeOfDay: state.config.timeOfDay === false });
+$('hotkeys').onclick = () => update({ hotkeys: !state.config.hotkeys });
 $('feed').onclick = () => update({ feed: state.config.feed === false });
 $('feed-hint').onclick = () => update({ feedHint: state.config.feedHint === false });
 $('auto-update').onclick = () => update({ autoUpdate: state.config.autoUpdate === false });

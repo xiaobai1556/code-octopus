@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu, dialog, nativeTheme, powerMonitor, clipboard, shell, Notification } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, dialog, nativeTheme, powerMonitor, clipboard, shell, Notification, globalShortcut } = require('electron');
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
@@ -49,7 +49,7 @@ let tray = null;
 let config = {
   scale: 5, bubbles: 'full', collide: true, color: 0, lang: 'auto', contextWindow: 'auto', sound: true, lastReportDay: '',
   outfit: { head: '', face: '', neck: '' }, holidays: true, feed: true, feedDir: '', feedHint: true, lastHungryDay: '', onboarded: false, autoUpdate: true,
-  approveOnPet: false, dance: true, timeOfDay: true, pomodoroMin: 25, notifyFullscreen: true,
+  approveOnPet: false, dance: true, timeOfDay: true, pomodoroMin: 25, notifyFullscreen: true, hotkeys: false,
 };
 const POMODORO_MINUTES = [15, 25, 45];
 const BUBBLE_MODES = ['alerts', 'brief', 'full'];
@@ -1067,7 +1067,7 @@ function startServer() {
           const state = {
             screens, pets, petDragging, dragOverlay: dragOverlay && dragOverlay.id, externalDrag, lastPressAt, buttons, captureLog, userDragging, drags, duplicatesDropped, userAway, locale: locale(),
             sessions: [...sessions].map(([id, s]) => ({ id, hwnd: s.hwnd, exe: s.exe, used: s.used, limit: contextLimit(s), costUSD: s.costUSD, screen: sessionOverlay.get(id) })),
-            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents, errors: recentErrors, toasts: recentToasts,
+            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents, errors: recentErrors, toasts: recentToasts, hotkeys: hotkeyStatus,
           };
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(state));
@@ -1254,6 +1254,25 @@ function buildMenu(pet, o) {
 }
 
 // 把所有桌宠叫到你正看着的那块屏中间
+// ---------- 全局快捷键（设置里打开） ----------
+// 在哪儿都能按：把小章鱼叫到你正看着的那块屏中间、打开游戏厅。被别的程序占了的注册不上，设置面板里会说
+const HOTKEYS = { summon: 'Control+Alt+O', arcade: 'Control+Alt+G' };
+let hotkeyStatus = {}; // { summon: true/false, arcade: true/false }，没打开就是空的
+
+function applyHotkeys() {
+  for (const acc of Object.values(HOTKEYS)) if (globalShortcut.isRegistered(acc)) globalShortcut.unregister(acc);
+  hotkeyStatus = {};
+  if (!config.hotkeys) return;
+  const actions = { summon: () => summon(), arcade: () => openArcade() };
+  for (const [name, acc] of Object.entries(HOTKEYS)) {
+    try {
+      hotkeyStatus[name] = globalShortcut.register(acc, actions[name]);
+    } catch {
+      hotkeyStatus[name] = false;
+    }
+  }
+}
+
 function summon() {
   const to = cursorOverlay();
   for (const o of overlays.values()) sendTo(o, 'summon', { to: to.id, here: o === to });
@@ -1313,6 +1332,7 @@ function registerSettingsIpc() {
       holiday: OUTFITS.holiday(),
       lastBite: bite ? bite.files.length : 0,
       update: updater.status(),
+      hotkeys: hotkeyStatus,
     };
   });
 
@@ -1324,12 +1344,13 @@ function registerSettingsIpc() {
     if (Number.isInteger(patch.color) && patch.color >= 0 && patch.color < 6) clean.color = patch.color;
     if (patch.lang === 'auto' || I18N.NAMES[patch.lang]) clean.lang = patch.lang;
     if (CONTEXT_WINDOWS.includes(patch.contextWindow)) clean.contextWindow = patch.contextWindow;
-    for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay', 'notifyFullscreen']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
+    for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay', 'notifyFullscreen', 'hotkeys']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
     if (POMODORO_MINUTES.includes(patch.pomodoroMin)) clean.pomodoroMin = patch.pomodoroMin;
     const outfit = cleanOutfit(patch.outfit);
     if (outfit) clean.outfit = outfit;
     setConfig(clean);
     if ('autoUpdate' in clean) updater.setEnabled(clean.autoUpdate);
+    if ('hotkeys' in clean) applyHotkeys();
     return true;
   });
 
@@ -1590,6 +1611,7 @@ if (!app.requestSingleInstanceLock()) {
     registerArcadeIpc();
     syncOverlays();
     createTray();
+    applyHotkeys();
     startServer();
     updater.init(config.autoUpdate, (st) => {
       if (st.state === 'ready') sendTo(cursorOverlay(), 'update-ready', { version: st.version });
@@ -1611,6 +1633,7 @@ if (!app.requestSingleInstanceLock()) {
     const stopWatching = onMoveSize(onUserMoveStart, onUserMoveEnd);
     app.on('will-quit', () => {
       stopWatching();
+      globalShortcut.unregisterAll();
       setHighResTimer(false);
       stats.save();
     });
