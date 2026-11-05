@@ -329,6 +329,15 @@ function drawNeck(px, item, top, grow, bottom) {
     px(7, top + 7, 2, 1, B);
     px(8, top + 5, 1, 1, '#FFFFFF');
     px(7, top + 6, 1, 1, '#FFFFFF');
+  } else if (item === 'necktie') {
+    // 提交 100 次的成就：一条深蓝色领带，中间一道金色斜纹
+    const N = '#2B4C9B';
+    px(7, top + 3, 2, 1, '#1E3570'); // 领结
+    px(7, top + 4, 2, 2, N);
+    px(6, top + 6, 4, 1, N);
+    px(7, top + 7, 2, 1, N);
+    px(7, top + 5, 1, 1, '#F2C14E');
+    px(8, top + 6, 1, 1, '#F2C14E');
   } else if (item === 'medal') {
     // 今日挑战连续打卡的成就：红蓝绶带挂一枚金牌
     px(6, top + 3, 1, 1, '#3D6FD9');

@@ -123,4 +123,8 @@ test('git 提交、推送记到当天；日报里只留最后几条提交说明'
   assert.deepEqual(d.commitLog[7], { text: 'c10', project: 'app' });
   assert.equal(s.data.totals.commits, 10);
   assert.equal(s.data.totals.pushes, 1);
+  // 累计提交 100 次解锁成就
+  assert.ok(!achievements.evaluate(s).includes('shipper'));
+  for (let i = 0; i < 90; i++) s.record(ev('PostToolUse', { git: { op: 'commit', text: 'x' } }));
+  assert.ok(achievements.evaluate(s).includes('shipper'));
 });

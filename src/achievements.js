@@ -14,6 +14,7 @@ const LIST = [
   { id: 'veteran', item: 'sunglasses', goal: 50, value: (s) => s.totals.done }, // 做完 50 轮
   { id: 'foodie', item: 'chefhat', goal: 10, value: (s) => s.totals.eaten }, // 喂它吃 10 个文件
   { id: 'dailyfan', item: 'medal', goal: 7, value: (s) => arcade(s, 'daily', 'streak') }, // 今日挑战连续玩 7 天
+  { id: 'shipper', item: 'necktie', goal: 100, value: (s) => s.totals.commits || 0 }, // Claude 帮你提交了 100 次
   // 章鱼游戏厅：每个游戏一个（game 是哪个游戏，游戏厅的规则页会显示它）
   { id: 'debugger', game: 'bugs', item: 'bugclip', goal: 8, value: (s) => arcade(s, 'bugs', 'level') }, // 捉虫打到第 8 轮迭代
   { id: 'climber', game: 'hop', item: 'goggles', goal: 300, value: (s) => arcade(s, 'hop', 'meters') }, // 窗口跳跳到 300 米
