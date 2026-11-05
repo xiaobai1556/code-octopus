@@ -38,6 +38,14 @@ body {
   font: 14px/1.5 'Segoe UI', 'Microsoft YaHei UI', 'Yu Gothic UI', system-ui, sans-serif;
 }
 
+/* 汉字按语言挑字体：中日文共用的汉字在不同字体里字形不一样，日文用日文字体、繁体用繁体字体 */
+:lang(zh-TW) body {
+  font-family: 'Segoe UI', 'Microsoft JhengHei UI', system-ui, sans-serif;
+}
+:lang(ja) body {
+  font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', system-ui, sans-serif;
+}
+
 body {
   padding: 18px 18px 22px;
   user-select: none;
@@ -251,6 +259,32 @@ select {
   background: var(--card);
   min-width: 160px;
 }
+/* 免打扰时段：两个选小时的下拉框 */
+.quiet-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.seg.small {
+  margin-top: 6px;
+}
+.seg.small button {
+  padding: 2px 10px;
+  font-size: 12px;
+}
+.seg[hidden] {
+  display: none;
+}
+.quiet-range[hidden] {
+  display: none;
+}
+select.hour {
+  min-width: 0;
+  padding: 2px 6px;
+}
 
 /* ---------- 小章鱼列表 ---------- */
 .pets {
@@ -343,6 +377,9 @@ select {
   width: 7px;
   height: 7px;
   background: var(--line);
+}
+.status[hidden] {
+  display: none; /* display: flex 会盖掉浏览器默认的 [hidden] */
 }
 .status.ok {
   color: var(--ok);
@@ -556,6 +593,62 @@ footer {
   background: var(--accent);
 }
 
+/* ---------- 养成等级 ---------- */
+.level {
+  margin: 4px 0 10px;
+}
+.level small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.level .bar {
+  margin-top: 5px;
+  height: 6px;
+  background: var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.level .bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+/* ---------- 钓鱼图鉴 ---------- */
+.fishdex {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+}
+.fishdex li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px 6px;
+  border-radius: 8px;
+  background: var(--hover);
+  font-size: 12px;
+  text-align: center;
+}
+.fishdex li.locked {
+  color: var(--muted);
+}
+.fishdex canvas {
+  width: 32px;
+  height: 24px;
+}
+.fishdex .times {
+  font-size: 11px;
+  color: var(--muted);
+}
+.fishdex .rare {
+  color: #b9861f;
+}
+
 /* ---------- 喂文件 ---------- */
 .path {
   overflow: hidden;
@@ -564,4 +657,11 @@ footer {
   direction: rtl;
   text-align: left;
   user-select: text;
+}
+
+/* 用键盘操作时看得出焦点在哪（鼠标点的时候不显示） */
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

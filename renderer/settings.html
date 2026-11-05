@@ -60,6 +60,13 @@
           <button class="switch" id="sound" role="switch"></button>
         </div>
         <div class="row">
+          <div>
+            <span class="label" data-t="set.notify"></span>
+            <small data-t="set.notifyHint"></small>
+          </div>
+          <button class="switch" id="notify" role="switch"></button>
+        </div>
+        <div class="row">
           <span class="label" data-t="set.language"></span>
           <select id="lang"></select>
         </div>
@@ -80,6 +87,42 @@
             <small data-t="set.timeOfDayHint"></small>
           </div>
           <button class="switch" id="time-of-day" role="switch"></button>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.quietHours"></span>
+            <small data-t="set.quietHoursHint"></small>
+            <div class="quiet-range" id="quiet-range">
+              <select id="quiet-from" class="hour"></select>
+              <span data-t="set.quietTo"></span>
+              <select id="quiet-to" class="hour"></select>
+            </div>
+            <div class="status ok" id="quiet-now" hidden></div>
+          </div>
+          <button class="switch" id="quiet-hours" role="switch"></button>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.breakReminder"></span>
+            <small data-t="set.breakReminderHint"></small>
+            <div class="seg small" id="break-min"></div>
+          </div>
+          <button class="switch" id="break-reminder" role="switch"></button>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.costAlert"></span>
+            <small data-t="set.costAlertHint"></small>
+          </div>
+          <div class="seg" id="cost-alert"></div>
+        </div>
+        <div class="row">
+          <div>
+            <span class="label" data-t="set.hotkeys"></span>
+            <small data-t="set.hotkeysHint"></small>
+            <div class="status" id="hotkeys-status" hidden></div>
+          </div>
+          <button class="switch" id="hotkeys" role="switch"></button>
         </div>
         <div class="row">
           <div>
@@ -107,7 +150,17 @@
 
       <section class="card" id="achievements">
         <h2><span data-t="set.achievements"></span><span class="count" id="ach-count"></span></h2>
+        <div class="level" id="level">
+          <div><b id="level-name"></b> <small id="level-xp"></small></div>
+          <div class="bar"><i id="level-bar"></i></div>
+        </div>
         <ul class="achievements" id="ach-list"></ul>
+      </section>
+
+      <section class="card" id="fishdex">
+        <h2><span data-t="set.fishdex"></span><span class="count" id="fishdex-count"></span></h2>
+        <small class="hint" data-t="set.fishdexHint"></small>
+        <ul class="fishdex" id="fishdex-list"></ul>
       </section>
 
       <section class="card" id="feeding">
@@ -191,9 +244,24 @@
         </div>
       </section>
 
+      <section class="card" id="backup">
+        <h2 data-t="set.backup"></h2>
+        <div class="row">
+          <div>
+            <small data-t="set.backupHint"></small>
+            <div class="status" id="backup-status" hidden></div>
+          </div>
+          <div class="pet-buttons">
+            <button class="btn" id="backup-export" data-t="set.backupExport"></button>
+            <button class="btn" id="backup-import" data-t="set.backupImport"></button>
+          </div>
+        </div>
+      </section>
+
       <footer>
         <div class="actions">
           <button class="btn" id="report" data-t="set.report"></button>
+          <button class="btn" id="arcade" data-t="set.arcade"></button>
           <button class="btn" id="demo" data-t="set.demo"></button>
           <button class="btn" id="summon" data-t="set.summon"></button>
           <button class="btn" id="tour" data-t="set.tour"></button>
@@ -207,6 +275,7 @@
 
     <script src="../src/i18n.js"></script>
     <script src="../src/outfits.js"></script>
+    <script src="../src/catches.js"></script>
     <script src="sprite.js"></script>
     <script src="settings.js"></script>
   </body>

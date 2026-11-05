@@ -2,6 +2,7 @@
 // 只挪不删；每一批都记下原来的位置，可以"吐出来"（撤销）。文件夹、系统目录里的文件不吃。
 const fs = require('fs');
 const path = require('path');
+const { writeJsonAtomic } = require('./jsonfile');
 
 const MAX_PER_BITE = 50;
 const LOG_KEEP = 100;
@@ -119,8 +120,7 @@ class Feeder {
 
   save() {
     try {
-      fs.mkdirSync(path.dirname(this.logFile), { recursive: true });
-      fs.writeFileSync(this.logFile, JSON.stringify(this.log.slice(-LOG_KEEP)));
+      writeJsonAtomic(this.logFile, this.log.slice(-LOG_KEEP));
     } catch {}
   }
 }

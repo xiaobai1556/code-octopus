@@ -10,7 +10,7 @@ module.exports = {
   executableName: 'code-octopus',
   copyright: 'Copyright (c) 2026 xiaobai1556. MIT License. Unofficial fan project, not affiliated with or endorsed by Anthropic.',
   directories: { output: 'dist', buildResources: 'build' },
-  files: ['main.js', 'preload.js', 'settings-preload.js', 'report-preload.js', 'note-preload.js', 'src/**', 'renderer/**', '!renderer/_*', 'package.json'],
+  files: ['main.js', 'preload.js', 'settings-preload.js', 'report-preload.js', 'note-preload.js', 'arcade-preload.js', 'src/**', 'renderer/**', '!renderer/_*', 'package.json'],
   // claude 命令行读不到 asar 里面的文件，插件市场单独放在外面
   extraResources: [
     { from: '.claude-plugin', to: 'marketplace/.claude-plugin' },

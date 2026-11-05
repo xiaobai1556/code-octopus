@@ -1,10 +1,12 @@
 // 按天统计陪 Claude 干了多少活，给"每日小结"用。只存在本机 userData/stats.json 里。
 const fs = require('fs');
-const path = require('path');
+const { writeJsonAtomic } = require('./jsonfile');
 
 const KEEP_DAYS = 90;
 const MAX_TURN_MS = 3 * 60 * 60 * 1000; // 一轮最多算 3 小时，防止忘了关的会话把时长撑爆
 const MAX_KEYS = 300;
+const MAX_COMMIT_LOG = 8; // 日报里列出当天最后几次提交
+const { byId: CATCH_BY_ID } = require('./catches');
 
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -32,7 +34,7 @@ function emptyDay() {
 
 // 一辈子的累计数字（按天的数据只留 90 天），成就靠它判断
 function emptyTotals() {
-  return { sessions: 0, prompts: 0, tools: 0, edits: 0, testsPass: 0, helpers: 0, done: 0, busyMs: 0, lateNight: 0, earlyMorning: 0, eaten: 0 };
+  return { sessions: 0, prompts: 0, tools: 0, edits: 0, testsPass: 0, helpers: 0, done: 0, busyMs: 0, lateNight: 0, earlyMorning: 0, eaten: 0, commits: 0, pushes: 0 };
 }
 
 const active = (d) => !!d && (d.prompts > 0 || d.toolCount > 0);
@@ -61,6 +63,8 @@ function totalsFromDays(days) {
     t.helpers += d.helpers;
     t.done += d.done;
     t.busyMs += d.busyMs;
+    t.commits += d.commits || 0;
+    t.pushes += d.pushes || 0;
     t.lateNight += d.hours.slice(0, 4).reduce((a, b) => a + b, 0);
     t.earlyMorning += d.hours.slice(5, 7).reduce((a, b) => a + b, 0);
     best.dayTools = Math.max(best.dayTools, d.toolCount);
@@ -85,6 +89,7 @@ class Stats {
     } catch {}
     if (!this.data.totals) Object.assign(this.data, totalsFromDays(this.data.days));
     this.data.totals = { ...emptyTotals(), ...this.data.totals };
+    this.data.best = { dayTools: 0, streak: 0, turnMs: 0, ...this.data.best }; // 文件里缺了也不至于启动就崩
     this.turns = new Map(); // sessionId → 这一轮开始的时间
     this.saveTimer = null;
   }
@@ -99,6 +104,18 @@ class Stats {
 
   dates() {
     return Object.keys(this.data.days).sort();
+  }
+
+  // 截至 endKey 这天的最近 n 天（老的在前）：每天的忙碌时长、工具调用、花费，没干活的那天是 0
+  range(endKey, n = 30) {
+    const [y, m, d] = endKey.split('-').map(Number);
+    const out = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const key = dayKey(new Date(y, m - 1, d - i));
+      const day = this.data.days[key];
+      out.push({ date: key, busyMs: day ? day.busyMs : 0, tools: day ? day.toolCount : 0, costUSD: day ? day.costUSD || 0 : 0, commits: day ? day.commits || 0 : 0, testsPass: day ? day.tests.pass : 0 });
+    }
+    return out;
   }
 
   // ev：summarize 之后的事件；costUSD：这个会话目前累计花费（读不到就是 null）
@@ -143,6 +160,15 @@ class Stats {
         break;
       case 'PostToolUse':
       case 'PostToolUseFailure':
+        // git 提交、推送：日报里列出当天的提交说明（只留最后几条）
+        if (ev.git && ev.git.op === 'commit') {
+          d.commits = (d.commits || 0) + 1;
+          t.commits = (t.commits || 0) + 1;
+          d.commitLog = [...(d.commitLog || []), { text: String(ev.git.text || ''), project: ev.project || '' }].slice(-MAX_COMMIT_LOG);
+        } else if (ev.git && ev.git.op === 'push') {
+          d.pushes = (d.pushes || 0) + 1;
+          t.pushes = (t.pushes || 0) + 1;
+        }
         if (ev.test === 'pass') {
           d.tests.pass++;
           t.testsPass++;
@@ -188,6 +214,33 @@ class Stats {
     return { turnMs };
   }
 
+  // 游戏厅一局结束，记到今天：玩了几局、最高分（日报里显示）
+  recordGame(game, score) {
+    const games = (this.day().games ||= {});
+    const g = (games[game] ||= { plays: 0, best: 0 });
+    g.plays++;
+    g.best = Math.max(g.best, Math.max(0, Math.floor(Number(score) || 0)));
+    this.scheduleSave();
+  }
+
+  // 游戏厅一局结束：每个指标记最好的那次（捉虫的轮数、窗口跳跳的米数、连对条数、塔防守住的波数）
+  recordArcade(game, metrics) {
+    const all = (this.data.arcade ||= {});
+    const best = (all[game] ||= {});
+    for (const [k, v] of Object.entries(metrics || {})) if (typeof v === 'number' && v > (best[k] || 0)) best[k] = v;
+    this.scheduleSave();
+  }
+
+  // 钓鱼图鉴：钓上来一样东西。返回 { isNew, count, kinds }；不认识的返回 null
+  recordCatch(id) {
+    if (!CATCH_BY_ID[id]) return null;
+    const all = (this.data.catches ||= {});
+    const isNew = !all[id];
+    all[id] = (all[id] || 0) + 1;
+    this.scheduleSave();
+    return { isNew, count: all[id], kinds: Object.keys(all).length };
+  }
+
   // 喂它吃了几个文件
   recordEaten(n) {
     this.data.totals.eaten += n;
@@ -211,10 +264,7 @@ class Stats {
     const sessions = Object.keys(this.data.lastCost);
     for (const s of sessions.slice(0, Math.max(0, sessions.length - 200))) delete this.data.lastCost[s];
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      const tmp = this.file + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(this.data));
-      fs.renameSync(tmp, this.file);
+      writeJsonAtomic(this.file, this.data);
     } catch {}
   }
 }

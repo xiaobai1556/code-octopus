@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const CHANNELS = [
   'platforms', 'cursor', 'press', 'press-move', 'press-end', 'menu-at', 'claude-event', 'config', 'pet-command', 'summon', 'demo',
   'user-away', 'user-back', 'report-ready', 'layout', 'import-pet', 'evacuate', 'drag-transfer', 'spawn', 'achievement', 'hungry', 'tour', 'update-ready',
-  'permission-ask', 'permission-done', 'notes', 'pomodoro', 'pomodoro-ring', 'note-ring', 'music', 'beat',
+  'permission-ask', 'permission-done', 'notes', 'pomodoro', 'pomodoro-ring', 'note-ring', 'music', 'beat', 'arcade-record', 'level-up', 'break-reminder', 'party', 'cost-alert',
 ];
 
 contextBridge.exposeInMainWorld('petHost', {
@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('petHost', {
   tourDone: () => ipcRenderer.send('tour-done'),
   permissionDecision: (msg) => ipcRenderer.send('permission-decision', msg),
   noteDone: (id) => ipcRenderer.send('note-done', id),
+  caught: (id) => ipcRenderer.invoke('caught', id),
   // 拖到桌宠身上的文件：拿到真实路径交给主进程去"吃"
   feed: (files) => ipcRenderer.invoke('feed', Array.from(files || [], (f) => webUtils.getPathForFile(f)).filter(Boolean)),
   ready: () => ipcRenderer.send('renderer-ready'),

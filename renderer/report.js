@@ -77,7 +77,7 @@ function render() {
   $('next').disabled = data.date >= data.today;
   $('day-label').textContent = data.date;
   $('title').textContent = tr('rep.title', { date: prettyDate(data.date) });
-  $('subtitle').textContent = tr('rep.subtitle');
+  $('subtitle').textContent = data.level ? `${tr('rep.subtitle')} · ${tr('rep.level', { n: data.level.level, title: tr(`level.${data.level.title}`) })}` : tr('rep.subtitle');
   $('footer').textContent = `${tr('app.name')} · ${tr('set.unofficial')}`;
 
   const palette = PALETTES[data.color || 0] || PALETTES[0];
@@ -150,6 +150,31 @@ function render() {
   $('files-title').textContent = tr('rep.topFiles');
   topList($('files'), d.files);
 
+  // 这一天的 git 提交和推送：最后几条提交说明（新的在上面）
+  const commits = (d.commitLog || []).slice().reverse();
+  $('git-block').hidden = !(d.commits || d.pushes);
+  $('git-title').textContent = tr('rep.git');
+  $('git-sub').textContent = tr('rep.gitSub', { c: d.commits || 0, p: d.pushes || 0 });
+  $('commits').replaceChildren(
+    ...commits.map((c) => {
+      const li = el('li', c.text ? '' : 'quiet', c.text || tr('rep.gitQuiet'));
+      if (c.project) li.append(el('span', '', c.project));
+      return li;
+    })
+  );
+
+  // 这一天在游戏厅里玩了什么：几局、最高分
+  const games = Object.entries(d.games || {}).sort((a, b) => b[1].plays - a[1].plays);
+  $('games-block').hidden = !games.length;
+  $('games-title').textContent = tr('rep.games');
+  $('games').replaceChildren(
+    ...games.map(([id, g]) => {
+      const li = el('li', '', tr(`${id}.name`));
+      li.append(el('span', '', tr('rep.gameLine', { n: g.plays, best: g.best })));
+      return li;
+    })
+  );
+
   paint($('mini'), 32, 22, 2, palette, { eyes: 'happy', blush: true });
   $('mood').textContent = mood(d);
 }
@@ -158,6 +183,133 @@ async function load(date) {
   data = await api.get(date);
   I18N.setLang(data.locale);
   render();
+  renderTrend();
+}
+
+// ---------- 最近 30 天 ----------
+// 一次看一个指标（单色柱，没有图例，标题就是名字）；正在看的那天深一点，最高的那根标上数，虚线是干活日的平均；
+// 鼠标指着看具体数值，点一下跳到那天的日报
+const TREND = {
+  busy: { key: 'busyMs', label: 'rep.busy', fmt: (v) => fmtDuration(v), short: (v) => tr('rep.hShort', { n: +(v / 3600e3).toFixed(1) }) },
+  tools: { key: 'tools', label: 'rep.tools', fmt: (v) => String(Math.round(v)), short: (v) => String(Math.round(v)) },
+  cost: { key: 'costUSD', label: 'rep.cost', fmt: (v) => fmtCost(v), short: (v) => fmtCost(v) },
+};
+let trendMetric = 'busy';
+try {
+  if (TREND[localStorage.getItem('report-trend')]) trendMetric = localStorage.getItem('report-trend');
+} catch {}
+
+const shortDate = (key) => {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Intl.DateTimeFormat(data.locale, { month: 'numeric', day: 'numeric', weekday: 'short' }).format(new Date(y, m - 1, d));
+};
+const tickDate = (key) => key.slice(5).replace('-', '/').replace(/^0/, '').replace('/0', '/');
+
+// 这周（周一到看的这天）和上周同样几天比：忙碌时长、工具调用、提交、测试通过
+const WEEK = [
+  ['busyMs', 'rep.busy', (v) => fmtDuration(v)],
+  ['tools', 'rep.tools', (v) => String(v)],
+  ['commits', 'rep.commits', (v) => String(v)],
+  ['testsPass', 'rep.testsPassed', (v) => String(v)],
+];
+
+function deltaText(now, before) {
+  if (!now && !before) return '';
+  if (!before) return tr('rep.deltaNew');
+  const p = Math.round(((now - before) / before) * 100);
+  if (Math.abs(p) < 5) return tr('rep.deltaSame');
+  return p > 0 ? tr('rep.deltaUp', { p }) : tr('rep.deltaDown', { p: -p });
+}
+
+function renderWeek() {
+  const days = data.trend || [];
+  const n = days.length;
+  const end = n ? new Date(`${days[n - 1].date}T12:00:00`) : null;
+  const wd = end ? (end.getDay() + 6) % 7 : 0; // 周一是 0
+  $('week').hidden = n < wd + 8;
+  if ($('week').hidden) return;
+  const cur = days.slice(n - 1 - wd);
+  const prev = days.slice(n - 8 - wd, n - 7);
+  const sum = (list, k) => list.reduce((a, d) => a + (d[k] || 0), 0);
+  $('week-title').textContent = tr('rep.week');
+  $('week-range').textContent = tr('rep.weekRange', { from: shortDate(cur[0].date), to: shortDate(cur[cur.length - 1].date) });
+  $('week-stats').replaceChildren(
+    ...WEEK.map(([key, label, fmt]) => {
+      const now = sum(cur, key);
+      const box = stat(now ? fmt(now) : '—', tr(label));
+      box.append(el('div', 'delta', deltaText(now, sum(prev, key))));
+      return box;
+    })
+  );
+}
+
+function renderTrend() {
+  renderWeek();
+  const days = data.trend || [];
+  const m = TREND[trendMetric];
+  $('trend-title').textContent = tr('rep.trend');
+  $('trend-metric').replaceChildren(
+    ...Object.entries(TREND).map(([id, def]) => {
+      const b = el('button', id === trendMetric ? 'on' : '', tr(def.label));
+      b.setAttribute('aria-pressed', String(id === trendMetric));
+      b.onclick = () => {
+        trendMetric = id;
+        try {
+          localStorage.setItem('report-trend', id);
+        } catch {}
+        renderTrend();
+      };
+      return b;
+    })
+  );
+
+  const values = days.map((d) => d[m.key] || 0);
+  const total = values.reduce((a, b) => a + b, 0);
+  const active = values.filter((v) => v > 0).length;
+  const max = Math.max(0, ...values);
+  const bestIdx = max > 0 ? values.indexOf(max) : -1;
+  const avg = active ? total / active : 0;
+  $('trend-stats').replaceChildren(
+    stat(total ? m.fmt(total) : '—', tr('rep.total')),
+    stat(tr('rep.daysValue', { n: active }), tr('rep.activeDays')),
+    stat(avg ? m.fmt(avg) : '—', tr('rep.avg')),
+    stat(bestIdx >= 0 ? tickDate(days[bestIdx].date) : '—', tr('rep.bestDay'))
+  );
+
+  const tip = $('trend-tip');
+  const show = (btn, d, v) => {
+    tip.textContent = `${shortDate(d.date)} · ${v ? m.fmt(v) : '—'}`;
+    tip.style.left = `${btn.offsetLeft + btn.offsetWidth / 2}px`;
+    tip.hidden = false;
+  };
+  const hide = () => (tip.hidden = true);
+  $('trend-bars').replaceChildren(
+    ...days.map((d, i) => {
+      const v = values[i];
+      const b = el('button', [v ? '' : 'zero', d.date === data.date ? 'cur' : ''].filter(Boolean).join(' '));
+      b.style.setProperty('--h', `${max ? (v / max) * 100 : 0}%`);
+      b.setAttribute('aria-label', `${shortDate(d.date)} ${v ? m.fmt(v) : '—'}`);
+      if (i === bestIdx) b.append(el('b', '', m.short(v))); // 只标最高的那根
+      b.onmouseenter = b.onfocus = () => show(b, d, v);
+      b.onmouseleave = b.onblur = hide;
+      b.onclick = () => {
+        hide();
+        load(d.date);
+      };
+      return b;
+    })
+  );
+  hide();
+
+  const line = $('trend-avg');
+  line.hidden = !(avg && max);
+  if (avg && max) {
+    line.style.bottom = `${(avg / max) * 100}%`;
+    line.firstElementChild.textContent = tr('rep.avgLine', { v: m.short(avg) });
+  }
+  const ticks = days.length ? [days[0], days[Math.floor(days.length / 2)], days[days.length - 1]] : [];
+  $('trend-ticks').replaceChildren(...ticks.map((d) => el('span', '', tickDate(d.date))));
+  $('trend-hint').textContent = tr(total ? 'rep.trendHint' : 'rep.trendEmpty');
 }
 
 function cardRect() {
@@ -191,8 +343,23 @@ $('save').onclick = async () => {
 };
 
 load(new URLSearchParams(location.search).get('date') || undefined);
+// 窗口一直开着时，切回来就刷新一下：数字跟上；看的是"今天"的话，过了零点就换到新的一天
+window.addEventListener('focus', () => {
+  if (data) load(data.date === data.today ? undefined : data.date);
+});
 
 // ---------- 不在 Electron 里时的假数据，方便看界面 ----------
+function mockTrend(end) {
+  const [y, m, d] = end.split('-').map(Number);
+  return Array.from({ length: 30 }, (_, i) => {
+    const day = new Date(y, m - 1, d - 29 + i);
+    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+    const off = day.getDay() === 0 || day.getDay() === 6 ? 0.25 : 1;
+    const busy = Math.max(0, Math.round((Math.sin(i * 1.7) * 0.5 + 0.7) * off * 4 * 3600e3 * (i % 9 === 4 ? 0 : 1)));
+    return { date: key, busyMs: busy, tools: Math.round(busy / 3600e3 * 140), costUSD: +(busy / 3600e3 * 3.1).toFixed(2), commits: Math.round(busy / 3600e3 * 1.5), testsPass: Math.round(busy / 3600e3 * 4) };
+  });
+}
+
 function mockApi() {
   const today = '2026-10-08';
   const day = {
@@ -211,9 +378,17 @@ function mockApi() {
     projects: { 'claude-pet': 720, forge: 96, 'claude-journey': 42 },
     hours: [0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 40, 66, 21, 8, 52, 97, 120, 88, 30, 14, 61, 79, 34, 0],
     costUSD: 18.42,
+    games: { bugs: { plays: 3, best: 840 }, defense: { plays: 1, best: 2310 } },
+    commits: 3,
+    pushes: 1,
+    commitLog: [
+      { text: 'Fix the login button', project: 'web-app' },
+      { text: 'Add a retry to fetchUser', project: 'web-app' },
+      { text: '', project: 'api' },
+    ],
   };
   return {
-    get: async (date) => ({ date: date || today, today, day: (date || today) === today ? day : null, dates: ['2026-10-07', today], locale: I18N.detect(navigator.languages), color: 0 }),
+    get: async (date) => ({ date: date || today, today, day: (date || today) === today ? day : null, dates: ['2026-10-07', today], trend: mockTrend(date || today), locale: I18N.detect(navigator.languages), color: 0 }),
     copy: async () => true,
     save: async () => '',
   };

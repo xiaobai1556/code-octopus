@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu, dialog, nativeTheme, powerMonitor, clipboard, shell } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, dialog, nativeTheme, powerMonitor, clipboard, shell, Notification, globalShortcut } = require('electron');
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
@@ -18,6 +18,14 @@ const { Feeder, looseFiles } = require('./src/feed');
 const updater = require('./src/updater');
 const I18N = require('./src/i18n');
 const { trayIcon } = require('./src/icon');
+const { writeJsonAtomic } = require('./src/jsonfile');
+const { ArcadeScores } = require('./src/arcade');
+const notify = require('./src/notify');
+const { inQuietHours } = require('./src/quiet');
+const backup = require('./src/backup');
+const CONFIG = require('./src/config');
+const REMIND = require('./src/reminders');
+const LEVEL = require('./src/level');
 
 const tr = I18N.t;
 const PORT = Number(process.env.CLAUDE_PET_PORT) || 23333;
@@ -38,23 +46,24 @@ let scanTimer = null;
 
 let settingsWin = null;
 let tray = null;
-// bubbles：alerts 只提醒 / brief 简洁 / full 详细；collide：窗口是不是实心的；
-// contextWindow：算"饱腹度"用的上下文窗口大小，auto 或 200000 / 1000000；sound：提示音；
-// lastReportDay：哪天已经提醒过看日报；outfit：穿戴的装扮；holidays：节日自动换装；
-// feed：拖文件喂它；feedDir：章鱼的肚子在哪；feedHint：下载文件夹太乱时提醒；onboarded：看过新手引导；
-// approveOnPet：在桌宠身上直接批准权限请求；dance：放歌时跳舞；timeOfDay：跟着时间变化；pomodoroMin：番茄钟多少分钟
-let config = {
-  scale: 5, bubbles: 'full', collide: true, color: 0, lang: 'auto', contextWindow: 'auto', sound: true, lastReportDay: '',
-  outfit: { head: '', face: '', neck: '' }, holidays: true, feed: true, feedDir: '', feedHint: true, lastHungryDay: '', onboarded: false, autoUpdate: true,
-  approveOnPet: false, dance: true, timeOfDay: true, pomodoroMin: 25,
-};
-const POMODORO_MINUTES = [15, 25, 45];
-const BUBBLE_MODES = ['alerts', 'brief', 'full'];
-const CONTEXT_WINDOWS = ['auto', 200000, 1000000];
+// 设置：默认值、老版本升级、设置面板改动的校验都在 src/config.js
+let config = CONFIG.defaults();
 let reportWin = null;
+let arcadeWin = null;
+let arcade = null; // 章鱼游戏厅的成绩
 let stats = null;
 let feeder = null;
 const recentEvents = []; // 最近收到的事件，/state 和设置面板里能看到，方便排查 hooks 有没有接上
+// 主进程里出过的错（定时循环里、启动以后漏网的异常），/state 里能看到。控制台只打每处的前几次
+const recentErrors = [];
+const errorCounts = {};
+function noteError(where, err) {
+  errorCounts[where] = (errorCounts[where] || 0) + 1;
+  recentErrors.push({ at: new Date().toISOString(), where, count: errorCounts[where], message: String((err && err.stack) || err).slice(0, 600) });
+  if (recentErrors.length > 20) recentErrors.shift();
+  if (errorCounts[where] <= 3) console.error(`[code-octopus] ${where}:`, err);
+}
+let quitting = false;
 
 const configPath = () => path.join(app.getPath('userData'), 'config.json');
 
@@ -64,18 +73,12 @@ function loadConfig() {
     saved = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
   } catch {}
   if (!saved) return;
-  // 旧版的"安静模式"开关换成了气泡三档
-  if (saved.bubbles == null && typeof saved.quiet === 'boolean') saved.bubbles = saved.quiet ? 'alerts' : 'full';
-  delete saved.quiet;
-  // 从老版本升级上来的不再弹新手引导
-  if (saved.onboarded == null) saved.onboarded = true;
-  config = { ...config, ...saved, outfit: { ...config.outfit, ...(saved.outfit || {}) } };
+  config = CONFIG.fromSaved(saved);
 }
 
 function saveConfig() {
   try {
-    fs.mkdirSync(path.dirname(configPath()), { recursive: true });
-    fs.writeFileSync(configPath(), JSON.stringify(config, null, 2));
+    writeJsonAtomic(configPath(), config, true);
   } catch {}
 }
 
@@ -84,10 +87,28 @@ function saveConfig() {
 const systemLocale = () => I18N.detect(app.getPreferredSystemLanguages());
 const locale = () => (config.lang !== 'auto' && I18N.NAMES[config.lang] ? config.lang : systemLocale());
 
+// 现在是不是免打扰时段
+const quietNow = () => !!config.quietHours && inQuietHours(config.quietFrom, config.quietTo);
+
+// 发给覆盖层的设置：免打扰时段里气泡只提醒、不响提示音（不改你自己的设置，时段一过就恢复）
+function overlayConfig() {
+  const quiet = quietNow();
+  return { ...config, locale: locale(), bubbles: quiet ? 'alerts' : config.bubbles, sound: quiet ? false : config.sound, quietNow: quiet };
+}
+
 function applyConfig() {
   I18N.setLang(locale());
   if (tray) tray.setToolTip(tr('app.name'));
-  broadcast('config', { ...config, locale: locale() });
+  broadcast('config', overlayConfig());
+}
+
+// 每半分钟看一眼：进出免打扰时段时重新发一次设置
+let wasQuiet = false;
+function checkQuietHours() {
+  const q = quietNow();
+  if (q === wasQuiet) return;
+  wasQuiet = q;
+  applyConfig();
 }
 
 function setConfig(patch) {
@@ -173,8 +194,8 @@ function createOverlay(d) {
   // 不用 { forward: true }：它在本进程装一个全局底层鼠标钩子，高回报率鼠标每秒上千个事件都要先经过这里，
   // 会把主进程的定时器饿死（拖窗口时扫描停顿几百毫秒），还可能拖慢系统鼠标。改为 pollMouse 主动读光标位置。
   win.setIgnoreMouseEvents(true);
-  // 每个覆盖层里的桌宠编号从不同的数开始，转移到别的屏幕以后编号也不会撞
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'), { query: { base: String(o.seq * 100000) } });
+  loadOverlayPage(o);
+  win.webContents.on('render-process-gone', (_e, details) => onOverlayGone(o, details));
   win.once('ready-to-show', () => {
     win.showInactive();
     win.setBounds(o.area); // 缩放不一样的副屏上，创建时给的尺寸可能被按主屏缩放算错，显示后再设一次
@@ -183,6 +204,34 @@ function createOverlay(d) {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   o.hwnd = Number(win.getNativeWindowHandle().readBigUInt64LE(0));
   return o;
+}
+
+// 每个覆盖层里的桌宠编号从不同的数开始，转移到别的屏幕以后编号也不会撞
+function loadOverlayPage(o) {
+  o.win.loadFile(path.join(__dirname, 'renderer', 'index.html'), { query: { base: String(o.seq * 100000) } });
+}
+
+// 覆盖层的渲染进程崩了（或者被系统杀掉）：它最后发来的点击范围还在，屏幕上那块地方会一直吃掉点击，
+// 桌宠也不会再出现。清掉点击范围、恢复穿透、交还它手上等批准的请求，过一会儿重新加载（连着崩就等久一点）
+function onOverlayGone(o, details) {
+  logMouse('renderer-gone', o, { reason: details && details.reason });
+  noteError('renderer-gone', new Error(`screen ${o.id}: ${details && details.reason}`));
+  o.ready = false;
+  o.hitboxes = [];
+  o.captured = false;
+  o.crashes = (o.crashes || 0) + 1;
+  if (dragOverlay === o) {
+    petDragging = false;
+    dragOverlay = null;
+  }
+  for (const a of [...asks.values()]) if (a.target === o) settleAsk(a.id, null, 'crashed');
+  if (quitting || o.win.isDestroyed() || overlays.get(o.id) !== o) return;
+  o.win.setIgnoreMouseEvents(true);
+  o.seq = ++overlaySeq; // 换个编号起点：崩之前转移到别的屏上的桌宠还用着旧编号
+  const delay = Math.min(30000, 1000 * 2 ** Math.min(5, o.crashes - 1));
+  setTimeout(() => {
+    if (!quitting && !o.win.isDestroyed() && overlays.get(o.id) === o) loadOverlayPage(o);
+  }, delay);
 }
 
 function updateOverlay(o, d) {
@@ -361,8 +410,13 @@ function pollMouse() {
   }
 }
 
+// 两个定时循环都是做完一次再排下一次：中间出一次错也要接着排，不然就永远停了（读不到鼠标 = 再也点不动它）
 function mouseLoop() {
-  pollMouse();
+  try {
+    pollMouse();
+  } catch (err) {
+    noteError('mouse', err);
+  }
   setTimeout(mouseLoop, petDragging ? DRAG_POLL_MS : CURSOR_POLL_MS);
 }
 
@@ -431,8 +485,25 @@ function checkUserIdle() {
     broadcast('user-away');
   } else if (userAway && idle < 5) {
     userAway = false;
+    workSince = Date.now();
     broadcast('user-back');
   }
+}
+
+// ---------- 休息提醒 ----------
+// 连着在电脑前 breakMin 分钟（中间没离开过 5 分钟以上），小章鱼端杯水来提醒一次，然后重新计时。
+// 免打扰时段、番茄钟进行中（它自己安排休息）、全屏看视频玩游戏时不提醒
+let workSince = Date.now();
+function checkBreak() {
+  if (userAway) {
+    workSince = Date.now();
+    return;
+  }
+  const o = cursorOverlay();
+  const due = REMIND.breakDue({ now: Date.now(), workSince, enabled: config.breakReminder, minutes: config.breakMin || 60, quiet: quietNow(), pomodoro: !!pomodoro, hidden: !o || o.hidden });
+  if (!due) return;
+  workSince = Date.now(); // 到点了：提醒或者跳过，都重新计时
+  if (due === 'remind') sendTo(o, 'break-reminder', { minutes: config.breakMin || 60 });
 }
 
 // ---------- 地形：窗口顶边当平台、窗口本身当实心墙 ----------
@@ -489,13 +560,17 @@ let lastDrag = null;
 
 function scanLoop() {
   clearTimeout(scanTimer);
-  if (userDragging && lastDrag) {
-    const now = performance.now();
-    if (lastDrag.lastScan) lastDrag.maxScanGapMs = Math.max(lastDrag.maxScanGapMs, Math.round(now - lastDrag.lastScan));
-    lastDrag.lastScan = now;
-    lastDrag.scans++;
+  try {
+    if (userDragging && lastDrag) {
+      const now = performance.now();
+      if (lastDrag.lastScan) lastDrag.maxScanGapMs = Math.max(lastDrag.maxScanGapMs, Math.round(now - lastDrag.lastScan));
+      lastDrag.lastScan = now;
+      lastDrag.scans++;
+    }
+    scanPlatforms();
+  } catch (err) {
+    noteError('scan', err);
   }
-  scanPlatforms();
   // 拖桌宠时也保持 1ms 系统定时器，几毫秒一次的鼠标轮询才做得到
   const hot = userDragging || petDragging || Date.now() < hotUntil;
   setHighResTimer(hot);
@@ -631,6 +706,7 @@ function onHookRequest(url, text, remotePort) {
     ev.longTask = ev.event === 'Stop' && ev.turnMs >= LONG_TASK_MS && !(info.hwnd && foregroundWindow() === info.hwnd);
   }
   const target = overlayForSession(ev.sessionId, info);
+  fullscreenToast(ev, info, target);
   if (ev.event === 'SessionEnd') {
     sessions.delete(ev.sessionId);
     sessionOverlay.delete(ev.sessionId);
@@ -642,6 +718,65 @@ function onHookRequest(url, text, remotePort) {
   if (recentEvents.length > 30) recentEvents.shift();
   sendTo(target, 'claude-event', ev);
   if (stats) unlock(achievements.evaluate(stats), target, ev.sessionId);
+  if (stats) checkLevel(target, ev.sessionId);
+  if (stats) checkCost(target, ev.sessionId);
+}
+
+// 花费提醒：当天花费第一次超过设的金额，提醒一次（免打扰时段里先不说，过了再说）
+function checkCost(target, sessionId) {
+  const d = stats.get(dayKey());
+  if (!REMIND.costDue(d, config.costAlert, quietNow())) return;
+  d.costAlerted = true;
+  stats.scheduleSave();
+  sendTo(target || cursorOverlay(), 'cost-alert', { spent: d.costUSD, limit: config.costAlert, sessionId });
+}
+
+// /summary 的内容：今天的数字、等级、钓鱼图鉴
+function todaySummary() {
+  const lv = LEVEL.levelOf(LEVEL.xpOf(stats ? stats.data.totals : {}));
+  return REMIND.todaySummary({ date: dayKey(), day: stats && stats.get(dayKey()), level: lv, title: tr(`level.${lv.title}`), language: locale() });
+}
+
+// 养成等级：经验涨过了下一级，让那只小章鱼庆祝一下。第一次（还没记过等级）只记下来，不补庆祝
+function checkLevel(target, sessionId) {
+  const lv = LEVEL.levelOf(LEVEL.xpOf(stats.data.totals));
+  const known = stats.data.level;
+  if (known != null && lv.level <= known) return;
+  stats.data.level = lv.level;
+  stats.scheduleSave();
+  if (known != null) sendTo(target || cursorOverlay(), 'level-up', { level: lv.level, title: lv.title, sessionId });
+}
+
+// ---------- 全屏时用系统通知 ----------
+// 这个会话的小章鱼所在的屏被全屏应用盖住了（覆盖层藏起来了），要你批准、问你问题、长任务做完了：弹系统通知，点它回到会话
+const toastAt = {};
+const recentToasts = []; // /state 里能看到
+const liveToasts = new Set(); // 通知对象要留着引用，被回收了点它就没反应
+
+function fullscreenToast(ev, info, target) {
+  const hit = notify.shouldToast(ev, {
+    enabled: config.notifyFullscreen !== false,
+    hidden: !!(target && target.hidden),
+    watching: !!(info.hwnd && foregroundWindow() === info.hwnd),
+    lastAt: toastAt,
+  });
+  if (!hit) return;
+  toastAt[hit.key] = Date.now();
+  const text = notify.toastText(ev, hit.kind, tr);
+  const shown = Notification.isSupported();
+  recentToasts.push({ at: new Date().toISOString(), kind: hit.kind, sessionId: ev.sessionId, ...text, shown });
+  if (recentToasts.length > 10) recentToasts.shift();
+  if (!shown) return;
+  const n = new Notification({ title: text.title, body: text.body, icon: trayIcon(), silent: config.sound === false || quietNow() });
+  liveToasts.add(n);
+  const forget = () => liveToasts.delete(n);
+  n.on('click', () => {
+    forget();
+    focusSession(ev.sessionId);
+  });
+  n.on('close', forget);
+  setTimeout(forget, 10 * 60 * 1000);
+  n.show();
 }
 
 function focusSession(sessionId) {
@@ -707,8 +842,11 @@ function onPermissionRequest(req, res, text) {
   } catch {}
   const ev = raw && summarize(raw);
   const info = ev && sessions.get(ev.sessionId);
-  // 你正看着那个会话的窗口：交给终端
-  if (!ev || !info || !config.approveOnPet || (info.hwnd && foregroundWindow() === info.hwnd)) return reply(res, null);
+  // 你正看着那个会话的窗口：交给终端。找不到会话窗口时也交给终端：没法知道你是不是正看着终端，
+  // 扣住请求的话，终端里的 Claude 会一直卡着，切回窗口也不会放行
+  if (!ev || !info || !config.approveOnPet || !info.hwnd || foregroundWindow() === info.hwnd) return reply(res, null);
+  // 小章鱼所在的屏被全屏应用盖住了：气泡里的按钮你看不到，也交给终端（这时会弹系统通知）
+  if (overlayForSession(ev.sessionId, info).hidden) return reply(res, null);
   const hash = crypto.createHash('sha1').update(text).digest('hex');
   let ask = [...asks.values()].find((a) => a.hash === hash);
   if (!ask) {
@@ -802,7 +940,7 @@ function loadNotes() {
 
 function saveNotes() {
   try {
-    fs.writeFileSync(notesPath(), JSON.stringify(notes, null, 2));
+    writeJsonAtomic(notesPath(), notes, true);
   } catch {}
   broadcast('notes', notes);
 }
@@ -913,10 +1051,15 @@ function petStates(expr) {
   );
 }
 
+// 只认按本机地址连进来的请求。DNS 重绑定时网页用的是它自己的域名（Host 头对不上），
+// 而同源 GET 不带 Origin，光拦 Origin 拦不住它读 /state
+const LOCAL_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
+const localHost = (host) => !host || LOCAL_HOSTS.has(String(host).toLowerCase());
+
 function startServer() {
   const server = http.createServer((req, res) => {
     // 浏览器里的网页会带 Origin，直接拒绝，只接受本机命令行（curl）发来的事件
-    if (req.headers.origin) {
+    if (req.headers.origin || !localHost(req.headers.host)) {
       res.writeHead(403);
       res.end();
       return;
@@ -955,6 +1098,19 @@ function startServer() {
       });
       return;
     }
+    // 插件里的 /octopus：今天的小结（给 Claude 读的 JSON，它再用你的语言说给你听）
+    if (req.method === 'GET' && req.url === '/summary') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(todaySummary()));
+      return;
+    }
+    // 插件里的 /octopus-party：让小章鱼撒一次彩纸
+    if (req.method === 'POST' && req.url === '/party') {
+      sendTo(cursorOverlay(), 'party');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{"ok":true}');
+      return;
+    }
     if (req.method === 'GET' && req.url === '/ping') {
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end('claude-pet');
@@ -975,7 +1131,7 @@ function startServer() {
           const state = {
             screens, pets, petDragging, dragOverlay: dragOverlay && dragOverlay.id, externalDrag, lastPressAt, buttons, captureLog, userDragging, drags, duplicatesDropped, userAway, locale: locale(),
             sessions: [...sessions].map(([id, s]) => ({ id, hwnd: s.hwnd, exe: s.exe, used: s.used, limit: contextLimit(s), costUSD: s.costUSD, screen: sessionOverlay.get(id) })),
-            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents,
+            outfit: config.outfit, unlocked: stats && stats.data.unlocked, update: updater.status(), recentEvents, errors: recentErrors, toasts: recentToasts, hotkeys: hotkeyStatus, quietNow: quietNow(), breakInMin: Math.round(((config.breakMin || 60) * 60000 - (Date.now() - workSince)) / 60000),
           };
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(state));
@@ -1080,9 +1236,15 @@ function checkHunger() {
   sendTo(cursorOverlay(), 'hungry', { count: n });
 }
 
+// 打不开（比如"肚子"放在拔掉的 U 盘上）就告诉你，不要让异常一路冒到 Electron 的报错框
 function openFolder(dir) {
-  fs.mkdirSync(dir, { recursive: true });
-  shell.openPath(dir);
+  const fail = (msg) => dialog.showMessageBox({ type: 'warning', title: tr('app.name'), message: tr('err.openFolder', { dir }), detail: String(msg || '') });
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    return fail(err.message);
+  }
+  shell.openPath(dir).then((msg) => msg && fail(msg));
 }
 
 // ---------- 新手引导 ----------
@@ -1128,6 +1290,7 @@ function buildMenu(pet, o) {
   }
   items.push({ label: tr('menu.settings'), click: () => openSettings() });
   items.push({ label: tr('menu.report'), click: () => openReport() });
+  items.push({ label: tr('menu.arcade'), click: () => openArcade() });
   items.push({
     label: tr('menu.size'),
     submenu: [4, 5, 6, 8].map((scale) => ({
@@ -1137,6 +1300,7 @@ function buildMenu(pet, o) {
       click: () => setConfig({ scale }),
     })),
   });
+  if (quietNow()) items.push({ label: tr('menu.quietHoursNow', { h: config.quietTo }), enabled: false });
   items.push({ label: tr('menu.quiet'), type: 'checkbox', checked: config.bubbles === 'alerts', click: (mi) => setConfig({ bubbles: mi.checked ? 'alerts' : 'full' }) });
   items.push({ label: tr('menu.summon'), click: summon });
   items.push({ label: tr('menu.demo'), click: () => sendTo(cursorOverlay(), 'demo') });
@@ -1155,6 +1319,25 @@ function buildMenu(pet, o) {
 }
 
 // 把所有桌宠叫到你正看着的那块屏中间
+// ---------- 全局快捷键（设置里打开） ----------
+// 在哪儿都能按：把小章鱼叫到你正看着的那块屏中间、打开游戏厅。被别的程序占了的注册不上，设置面板里会说
+const HOTKEYS = { summon: 'Control+Alt+O', arcade: 'Control+Alt+G' };
+let hotkeyStatus = {}; // { summon: true/false, arcade: true/false }，没打开就是空的
+
+function applyHotkeys() {
+  for (const acc of Object.values(HOTKEYS)) if (globalShortcut.isRegistered(acc)) globalShortcut.unregister(acc);
+  hotkeyStatus = {};
+  if (!config.hotkeys) return;
+  const actions = { summon: () => summon(), arcade: () => openArcade() };
+  for (const [name, acc] of Object.entries(HOTKEYS)) {
+    try {
+      hotkeyStatus[name] = globalShortcut.register(acc, actions[name]);
+    } catch {
+      hotkeyStatus[name] = false;
+    }
+  }
+}
+
 function summon() {
   const to = cursorOverlay();
   for (const o of overlays.values()) sendTo(o, 'summon', { to: to.id, here: o === to });
@@ -1213,24 +1396,21 @@ function registerSettingsIpc() {
       achievements: achievements.progress(stats),
       holiday: OUTFITS.holiday(),
       lastBite: bite ? bite.files.length : 0,
+      catches: stats.data.catches || {},
+      level: LEVEL.levelOf(LEVEL.xpOf(stats.data.totals)),
       update: updater.status(),
+      hotkeys: hotkeyStatus,
+      quietNow: quietNow(),
     };
   });
 
   ipcMain.handle('settings:set', (_e, patch) => {
-    const clean = {};
-    if ([4, 5, 6, 8].includes(patch.scale)) clean.scale = patch.scale;
-    if (BUBBLE_MODES.includes(patch.bubbles)) clean.bubbles = patch.bubbles;
-    if (typeof patch.collide === 'boolean') clean.collide = patch.collide;
-    if (Number.isInteger(patch.color) && patch.color >= 0 && patch.color < 6) clean.color = patch.color;
-    if (patch.lang === 'auto' || I18N.NAMES[patch.lang]) clean.lang = patch.lang;
-    if (CONTEXT_WINDOWS.includes(patch.contextWindow)) clean.contextWindow = patch.contextWindow;
-    for (const key of ['sound', 'holidays', 'feed', 'feedHint', 'autoUpdate', 'approveOnPet', 'dance', 'timeOfDay']) if (typeof patch[key] === 'boolean') clean[key] = patch[key];
-    if (POMODORO_MINUTES.includes(patch.pomodoroMin)) clean.pomodoroMin = patch.pomodoroMin;
-    const outfit = cleanOutfit(patch.outfit);
+    const clean = CONFIG.cleanPatch(patch, I18N.NAMES);
+    const outfit = cleanOutfit(patch && patch.outfit);
     if (outfit) clean.outfit = outfit;
     setConfig(clean);
     if ('autoUpdate' in clean) updater.setEnabled(clean.autoUpdate);
+    if ('hotkeys' in clean) applyHotkeys();
     return true;
   });
 
@@ -1243,6 +1423,7 @@ function registerSettingsIpc() {
     if (name === 'demo') sendTo(cursorOverlay(), 'demo');
     else if (name === 'summon') summon();
     else if (name === 'report') openReport();
+    else if (name === 'arcade') openArcade();
     else if (name === 'tour') startTour(true);
     else if (name === 'quit') app.quit();
     else if (name === 'open-belly') openFolder(config.feedDir);
@@ -1254,6 +1435,8 @@ function registerSettingsIpc() {
       if (!r.canceled && r.filePaths[0]) setConfig({ feedDir: r.filePaths[0] });
     }
   });
+
+  ipcMain.handle('settings:backup', (_e, action) => (action === 'export' ? exportBackup() : action === 'import' ? importBackup() : null));
 
   ipcMain.handle('settings:autostart', (_e, on) => {
     app.setLoginItemSettings({ ...loginOpts, openAtLogin: !!on });
@@ -1318,7 +1501,7 @@ function openReport(date) {
 function registerReportIpc() {
   ipcMain.handle('report:get', (_e, date) => {
     const key = date || dayKey();
-    return { date: key, today: dayKey(), day: stats.get(key), dates: stats.dates(), locale: locale(), color: config.color, outfit: OUTFITS.effective(config.outfit, config.holidays) };
+    return { date: key, today: dayKey(), day: stats.get(key), dates: stats.dates(), trend: stats.range(key, 30), level: LEVEL.levelOf(LEVEL.xpOf(stats.data.totals)), locale: locale(), color: config.color, outfit: OUTFITS.effective(config.outfit, config.holidays) };
   });
   // 截取卡片那一块：复制到剪贴板，或者存到 图片\Code Octopus 里
   const capture = (rect) => reportWin.webContents.capturePage(rect && rect.width ? rect : undefined);
@@ -1329,7 +1512,8 @@ function registerReportIpc() {
   ipcMain.handle('report:save', async (_e, rect, date) => {
     const dir = path.join(app.getPath('pictures'), 'Code Octopus');
     fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, `claude-pet-${date || dayKey()}.png`);
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : dayKey();
+    const file = path.join(dir, `code-octopus-${day}.png`);
     fs.writeFileSync(file, (await capture(rect)).toPNG());
     shell.showItemInFolder(file);
     return file;
@@ -1339,11 +1523,142 @@ function registerReportIpc() {
 function checkReportTime() {
   const now = new Date();
   const today = dayKey(now);
-  if (config.lastReportDay === today || now.getHours() * 60 + now.getMinutes() < REPORT_AT_MINUTES) return;
+  if (config.lastReportDay === today || now.getHours() * 60 + now.getMinutes() < REPORT_AT_MINUTES || quietNow()) return;
   const d = stats && stats.get(today);
   if (!d || (!d.prompts && !d.toolCount)) return;
   setConfig({ lastReportDay: today });
   sendTo(cursorOverlay(), 'report-ready');
+}
+
+// ---------- 备份和恢复 ----------
+// 设置、统计（含成就）、游戏成绩、便签存成一个文件；恢复时先把现在的另存一份，替换完重启
+
+const currentBackup = () => {
+  stats.save(); // 还没写盘的统计先写下去
+  return backup.make({ config, stats: stats.data, arcade: arcade.data, notes }, app.getVersion());
+};
+
+async function exportBackup() {
+  const r = await dialog.showSaveDialog(settingsWin, {
+    defaultPath: path.join(app.getPath('documents'), `code-octopus-backup-${dayKey()}.json`),
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try {
+    writeJsonAtomic(r.filePath, currentBackup(), true);
+    return { ok: true, file: r.filePath };
+  } catch (err) {
+    return { ok: false, error: errorText(err) };
+  }
+}
+
+async function importBackup() {
+  const r = await dialog.showOpenDialog(settingsWin, { filters: [{ name: 'JSON', extensions: ['json'] }], properties: ['openFile'] });
+  if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
+  let parsed = { ok: false };
+  try {
+    parsed = backup.read(fs.readFileSync(r.filePaths[0], 'utf8'));
+  } catch {}
+  if (!parsed.ok) return { ok: false, error: tr('set.backupBad') };
+  const date = parsed.createdAt ? parsed.createdAt.slice(0, 10) : '?';
+  const answer = await dialog.showMessageBox(settingsWin, {
+    type: 'warning',
+    buttons: [tr('set.restoreGo'), tr('set.restoreCancel')],
+    defaultId: 1,
+    cancelId: 1,
+    message: tr('set.restoreConfirm', { date }),
+    detail: tr('set.restoreDetail'),
+  });
+  if (answer.response !== 0) return { ok: false, canceled: true };
+  const dir = app.getPath('userData');
+  try {
+    writeJsonAtomic(path.join(dir, `before-restore-${new Date().toISOString().replace(/[:.]/g, '-')}.json`), currentBackup(), true);
+    const d = parsed.data;
+    if (d.stats) {
+      // 写下去再用 Stats 读一遍，老版本的数据也会补齐；换掉内存里的，退出时存盘存的就是恢复的这份
+      writeJsonAtomic(path.join(dir, 'stats.json'), d.stats);
+      stats.data = new Stats(path.join(dir, 'stats.json')).data;
+      stats.save();
+    }
+    if (d.arcade) {
+      writeJsonAtomic(path.join(dir, 'arcade.json'), d.arcade);
+      arcade = new ArcadeScores(path.join(dir, 'arcade.json'));
+    }
+    if (d.notes) {
+      notes = d.notes;
+      saveNotes();
+    }
+    if (d.config) {
+      config = backup.mergeConfig(config, d.config);
+      saveConfig();
+    }
+  } catch (err) {
+    return { ok: false, error: errorText(err) };
+  }
+  app.relaunch();
+  app.quit();
+  return { ok: true };
+}
+
+// ---------- 章鱼游戏厅 ----------
+// 独立的游戏窗口（renderer/arcade.html）：捉虫、窗口跳跳、批准还是拒绝。游戏里的小章鱼用你设置的颜色和装扮；
+// 破了纪录，桌面上的小章鱼跑来替你庆祝
+
+function openArcade() {
+  if (arcadeWin && !arcadeWin.isDestroyed()) {
+    if (arcadeWin.isMinimized()) arcadeWin.restore();
+    arcadeWin.show();
+    arcadeWin.focus();
+    return;
+  }
+  arcadeWin = new BrowserWindow({
+    width: 760,
+    height: 520,
+    minWidth: 480,
+    minHeight: 340,
+    useContentSize: true,
+    show: false,
+    icon: trayIcon(),
+    autoHideMenuBar: true,
+    backgroundColor: '#1D2130',
+    webPreferences: { preload: path.join(__dirname, 'arcade-preload.js') },
+  });
+  arcadeWin.removeMenu();
+  arcadeWin.loadFile(path.join(__dirname, 'renderer', 'arcade.html'));
+  arcadeWin.once('ready-to-show', () => arcadeWin.show());
+  arcadeWin.on('closed', () => (arcadeWin = null));
+}
+
+// 每个游戏结束时报上来的指标（成就看它们）：只收这几个
+const ARCADE_METRICS = { bugs: ['level'], hop: ['meters'], approve: ['streak'], defense: ['waves'], typing: ['wpm'], stack: ['depth'], whack: ['fixed'], deps: ['length'] };
+
+function registerArcadeIpc() {
+  ipcMain.handle('arcade:info', () => ({
+    locale: locale(),
+    color: config.color,
+    outfit: OUTFITS.effective(config.outfit, config.holidays),
+    sound: config.sound !== false,
+    scores: arcade.summary(),
+    daily: { day: dayKey(), scores: arcade.dailyOf(dayKey()), streak: arcade.streak() },
+    achievements: achievements.progress(stats).filter((a) => a.game),
+  }));
+  ipcMain.handle('arcade:score', (_e, game, score, metrics, day) => {
+    const r = arcade.record(game, score, day);
+    if (!r) return null;
+    const clean = {};
+    for (const key of ARCADE_METRICS[game] || []) {
+      const v = Math.floor(Number(metrics && metrics[key]));
+      if (Number.isFinite(v) && v > 0) clean[key] = Math.min(v, 1_000_000);
+    }
+    stats.recordArcade(game, clean);
+    if (r.streak) stats.recordArcade('daily', { streak: r.streak }); // 今日挑战连续打卡的成就看这个
+    stats.recordGame(game, score);
+    // 解锁了成就：桌面上的小章鱼来庆祝（顺手穿上新装扮）；没有成就但破了以前的纪录（第一局不算）：也来庆祝一下
+    const fresh = achievements.evaluate(stats);
+    if (fresh.length) unlock(fresh, cursorOverlay());
+    else if (r.record && r.prev > 0) sendTo(cursorOverlay(), 'arcade-record', { game, score: r.best });
+    return { ...r, unlocked: fresh.map((id) => ({ id, item: achievements.byId[id].item })), achievements: achievements.progress(stats).filter((a) => a.game) };
+  });
 }
 
 // ---------- 覆盖层发来的消息 ----------
@@ -1383,6 +1698,12 @@ function registerOverlayIpc() {
   });
   ipcMain.handle('note:info', () => ({ locale: locale() }));
   ipcMain.handle('feed', (e, paths) => eatFiles(e.sender, paths));
+  // 钓鱼图鉴：覆盖层钓上来一样东西，记下来；集齐了解锁成就
+  ipcMain.handle('caught', (e, id) => {
+    const r = stats.recordCatch(id);
+    if (r) unlock(achievements.evaluate(stats), overlayBySender(e.sender));
+    return r;
+  });
   ipcMain.on('renderer-ready', (e) => {
     const o = overlayBySender(e.sender);
     if (!o) return;
@@ -1390,7 +1711,7 @@ function registerOverlayIpc() {
     o.platforms = '';
     o.cursorKey = '';
     sendLayout(o);
-    sendTo(o, 'config', { ...config, locale: locale() });
+    sendTo(o, 'config', overlayConfig());
     sendTo(o, 'notes', notes);
     sendTo(o, 'pomodoro', pomodoroState());
     sendTo(o, 'music', { playing: music.playing });
@@ -1409,7 +1730,10 @@ let pendingUnlocks = []; // 启动时按以前的记录补解锁的成就，等�
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.setAppUserModelId('claude-pet');
+  // 安装版要和 electron-builder.config.js 里的 appId 一样：安装包建的快捷方式用的是 appId，
+  // 不一样的话任务栏会把运行中的窗口和固定的图标当成两个程序，系统通知也弹不出来（数据目录为了老用户留着旧名字，这个不用）。
+  // 从源码跑（npm start）没有开始菜单快捷方式，用 electron.exe 的路径，Windows 才认这个程序、肯弹它的通知
+  app.setAppUserModelId(app.isPackaged ? 'io.github.code-octopus' : process.execPath);
   app.whenReady().then(() => {
     loadConfig();
     I18N.setLang(locale());
@@ -1418,23 +1742,31 @@ if (!app.requestSingleInstanceLock()) {
       saveConfig();
     }
     stats = new Stats(path.join(app.getPath('userData'), 'stats.json'));
+    checkLevel(null);
+    arcade = new ArcadeScores(path.join(app.getPath('userData'), 'arcade.json'));
     feeder = new Feeder(path.join(app.getPath('userData'), 'feed-log.json'), [app.getAppPath(), app.getPath('userData'), path.dirname(process.execPath)]);
     pendingUnlocks = achievements.evaluate(stats);
     registerOverlayIpc();
     registerSettingsIpc();
     registerReportIpc();
+    registerArcadeIpc();
     syncOverlays();
     createTray();
+    applyHotkeys();
     startServer();
     updater.init(config.autoUpdate, (st) => {
       if (st.state === 'ready') sendTo(cursorOverlay(), 'update-ready', { version: st.version });
     });
 
     if (process.argv.includes('--settings')) openSettings();
+    if (process.argv.includes('--arcade')) openArcade();
     scanLoop();
     mouseLoop();
     setInterval(checkUserIdle, 5000);
     setInterval(checkReportTime, 60 * 1000);
+    wasQuiet = quietNow();
+    setInterval(checkQuietHours, 30 * 1000);
+    setInterval(checkBreak, 30 * 1000);
     setInterval(ensurePet, 500);
     setInterval(keepOnTop, 1000);
     setTimeout(checkHunger, 10 * 60 * 1000);
@@ -1445,14 +1777,20 @@ if (!app.requestSingleInstanceLock()) {
     const stopWatching = onMoveSize(onUserMoveStart, onUserMoveEnd);
     app.on('will-quit', () => {
       stopWatching();
+      globalShortcut.unregisterAll();
       setHighResTimer(false);
       stats.save();
     });
     screen.on('display-metrics-changed', onDisplaysChanged);
     screen.on('display-added', onDisplaysChanged);
     screen.on('display-removed', onDisplaysChanged);
+    // 启动完以后，定时器、事件回调里漏网的异常只记下来，不弹 Electron 的报错框：
+    // setInterval 里的错每次都会再来一遍，一直弹框比出错本身还烦。启动时的错还是照常弹出来
+    process.on('uncaughtException', (err) => noteError('uncaught', err));
+    process.on('unhandledRejection', (err) => noteError('rejection', err));
   });
-  // 再启动一次：带 --settings 就打开设置面板，否则把桌宠叫到屏幕中间
-  app.on('second-instance', (_e, argv) => (argv.includes('--settings') ? openSettings() : summon()));
+  // 再启动一次：带 --settings 就打开设置面板，带 --arcade 打开游戏厅，否则把桌宠叫到屏幕中间
+  app.on('second-instance', (_e, argv) => (argv.includes('--settings') ? openSettings() : argv.includes('--arcade') ? openArcade() : summon()));
+  app.on('before-quit', () => (quitting = true));
   app.on('window-all-closed', () => app.quit());
 }

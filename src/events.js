@@ -89,12 +89,28 @@ function taskChange(e, name, input = {}, response) {
   return null;
 }
 
-// 在桌宠上批准时显示的内容：命令尽量完整
+// 在桌宠上批准时显示的内容：命令尽量完整。截掉了就在末尾留个"…"，
+// 桌宠那边看到显示不全就不给「允许」（危险的部分可能正好在被截掉的那一段）
+const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 function askDetail(name = '', input = {}) {
-  if (name === 'Bash' || name === 'PowerShell') return String(input.command || '').slice(0, 400);
+  if (name === 'Bash' || name === 'PowerShell') return clip(String(input.command || ''), 400);
   if (input.file_path || input.notebook_path) return String(input.file_path || input.notebook_path);
-  if (input.url) return String(input.url).slice(0, 200);
-  return describeTool(name, input);
+  if (input.url) return clip(String(input.url), 200);
+  // 其他工具（MCP 之类）：把参数都列出来，不然只看得到工具名，不知道它要对什么下手
+  const args = argsSummary(input);
+  return args ? clip(args, 400) : describeTool(name, input);
+}
+
+// { repo: 'prod', path: 'a b.txt', force: true } → repo=prod path="a b.txt" force=true
+// 带空格、引号、换行的值用 JSON 写法，换行之类的不会被折行"藏"起来
+function argsSummary(input) {
+  if (!input || typeof input !== 'object') return '';
+  return Object.entries(input)
+    .map(([k, v]) => {
+      const text = typeof v === 'string' ? (v === '' || /[\s"'\\]/.test(v) ? JSON.stringify(v) : v) : JSON.stringify(v);
+      return `${k}=${text}`;
+    })
+    .join(' ');
 }
 
 function toText(v) {
@@ -108,15 +124,71 @@ function toText(v) {
   return String(v);
 }
 
-const TEST_CMD = /\b(test|tests|jest|vitest|pytest|mocha|ava|go test|cargo test|ctest|phpunit|rspec)\b/i;
+// 是不是在跑测试：只看每一段命令（&& ; | 隔开）开头的程序，不看命令里随便哪儿出现的 test，
+// 否则 cat test/x.json、ls tests 这种也会被当成测试，输出里有个 ok 就撒彩纸
+const RUN_PREFIX = /^(?:\(\s*|(?:sudo|time|env|npx|bunx|pnpx|uv\s+run|poetry\s+run|pipenv\s+run|bundle\s+exec|pnpm\s+(?:exec|dlx)|yarn\s+dlx)\s+|[A-Za-z_]\w*=\S*\s+)/i;
+const TEST_HEADS = [
+  /^(?:npm|pnpm|yarn|bun)(?:\.cmd)?\s+(?:run(?:-script)?\s+)?(?:t|test)(?:[:\s]|$)/i, // npm test、npm t、yarn test:unit
+  /^(?:npm|pnpm|yarn|bun)(?:\.cmd)?\s+run(?:-script)?\s+[\w:.-]*test[\w:.-]*(?:\s|$)/i, // npm run test:e2e、npm run unit-test
+  /^(?:yarn|pnpm|bun)\s+(?:jest|vitest|mocha|ava|playwright\s+test)\b/i,
+  /^(?:\S*[\\/])?(?:jest|vitest|mocha|ava|tap|pytest|py\.test|tox|nox|rspec|phpunit|ctest|karma)(?:\.cmd|\.exe)?(?:\s|$)/i, // 也认 vendor/bin/phpunit、node_modules/.bin/jest
+  /^(?:playwright|cypress)\s+(?:test|run)\b/i,
+  /^(?:go|deno|bun|dotnet|swift|zig|mix|flutter|dart)\s+test\b/i,
+  /^cargo\s+(?:test|nextest)\b/i,
+  /^node\s+(?:\S+\s+)*--test\b/i,
+  /^python[\d.]*\s+-m\s+(?:pytest|unittest)\b/i,
+  /^(?:\.[\\/])?(?:mvnw?|gradlew?)(?:\.cmd|\.bat)?\s+(?:\S+\s+)*(?:test|check|verify)\b/i,
+  /^make\s+(?:\S+\s+)*(?:test|check)\b/i,
+];
+
+// 命令拆成一段一段（&& || ; | 换行），每段去掉 sudo、npx、VAR=1 这些前缀
+function segments(cmd) {
+  return String(cmd || '')
+    .split(/&&|\|\||[;|\n]/)
+    .map((seg) => {
+      let s = seg.trim().replace(/\)+$/, '').trim(); // (cd app && npm test) 的右括号
+      for (let prev = ''; prev !== s; ) {
+        prev = s;
+        s = s.replace(RUN_PREFIX, '');
+      }
+      return s;
+    });
+}
+
+function isTestCommand(cmd) {
+  return segments(cmd).some((s) => TEST_HEADS.some((re) => re.test(s)));
+}
+
+// git commit / git push：命令里有，而且输出看得出真的成功了（提交有新的哈希；推送有 "To 远端" 和 "旧..新 分支 -> 分支"，没被拒）。
+// git 前面可以有 -C 目录、-c 配置、--no-pager 这些
+const GIT_HEAD = /^git(?:\.exe)?\s+(?:(?:-C|-c)\s+\S+\s+|--[\w-]+(?:=\S+)?\s+)*(commit|push)\b/i;
+function gitOutcome(ev, failed) {
+  if (failed || !/^(Bash|PowerShell)$/.test(ev.tool_name || '')) return null;
+  const ops = new Set(segments(ev.tool_input && ev.tool_input.command).map((s) => (s.match(GIT_HEAD) || [])[1]).filter(Boolean).map((op) => op.toLowerCase()));
+  if (!ops.size) return null;
+  const text = toText(ev.tool_result ?? ev.tool_response);
+  if (ops.has('push') && /^To\s+\S+/m.test(text) && !/\[(?:remote )?rejected\]/.test(text)) {
+    const m = text.match(/(?:[0-9a-f]{7,40}\.\.\.?[0-9a-f]{7,40}|\[new (?:branch|tag)\])\s+\S+\s+->\s+(\S+)/);
+    if (m) return { op: 'push', text: short(m[1], 40) };
+  }
+  if (ops.has('commit')) {
+    const m = text.match(/^\[[^\]\n]*?\b[0-9a-f]{7,40}\]\s*(.*)$/m); // [main 1a2b3c4] 修好登录 / [main (root-commit) 1a2b3c4] 第一次提交
+    if (m) return { op: 'commit', text: short(m[1], 60) };
+    // git commit -q 成功了什么都不打印（没东西可提交会出错退出，走不到这里）
+    const quiet = segments(ev.tool_input.command).some((seg) => /^git\b.*\bcommit\b.*\s(?:-q|--quiet)\b/i.test(seg));
+    if (quiet && !/nothing (?:added )?to commit|no changes added/i.test(text)) return { op: 'commit', text: '' };
+  }
+  return null;
+}
 
 function testOutcome(ev, failed) {
   const cmd = ev.tool_input && ev.tool_input.command;
-  if (!cmd || !TEST_CMD.test(cmd)) return null;
+  if (!isTestCommand(cmd)) return null;
   if (failed) return 'fail';
   const text = toText(ev.tool_result ?? ev.tool_response);
-  if (/\b[1-9]\d*\s+(failed|failing|failures?)\b/i.test(text) || /^\s*FAIL\b/m.test(text)) return 'fail';
-  if (/\b(passed|passing)\b|\bok\b|✓/i.test(text)) return 'pass';
+  // 各家的失败写法：3 failed / 2 failing、行首 FAIL / FAILED、node --test 和 TAP 的 "# fail 1"
+  if (/\b[1-9]\d*\s+(failed|failing|failures?)\b/i.test(text) || /^\s*FAIL(?:ED)?\b/m.test(text) || /^#\s*fail\s+[1-9]/im.test(text)) return 'fail';
+  if (/\b(passed|passing)\b|\bok\b|✓/i.test(text) || /^#\s*pass\s+[1-9]/im.test(text)) return 'pass';
   return null;
 }
 
@@ -163,6 +235,7 @@ function summarize(ev) {
       out.detail = describeTool(out.tool, ev.tool_input || {}); // 和 PermissionRequest 的对得上：等批准的那个工具跑完了
       out.error = failed;
       out.test = testOutcome(ev, failed);
+      out.git = out.test ? null : gitOutcome(ev, failed);
       out.task = failed ? null : taskChange(e, out.tool, ev.tool_input || {}, ev.tool_response);
       break;
     }
@@ -205,4 +278,4 @@ function salvage(text) {
   return summarize({ hook_event_name: name, session_id: pick('session_id'), cwd: pick('cwd'), tool_name: pick('tool_name') });
 }
 
-module.exports = { summarize, salvage, toolKind, askDetail };
+module.exports = { summarize, salvage, toolKind, askDetail, isTestCommand };

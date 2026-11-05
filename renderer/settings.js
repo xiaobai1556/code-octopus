@@ -60,6 +60,29 @@ const itemPose = (outfit, extra) => ({ outfit, headroom: OUTFITS.headroom(outfit
 
 // ---------- 渲染 ----------
 
+// 读屏和键盘：开关、语言下拉框拿同一行里的文字当名字、小字说明当描述（不然读屏只念"开关，开"）
+function linkLabels() {
+  let n = 0;
+  for (const ctl of document.querySelectorAll('.row .switch, .row select')) {
+    const row = ctl.closest('.row');
+    const label = row.querySelector('.label');
+    if (!label) continue;
+    n++;
+    label.id = label.id || `label-${n}`;
+    ctl.setAttribute('aria-labelledby', label.id);
+    const hint = row.querySelector('small');
+    if (hint) {
+      hint.id = hint.id || `hint-${n}`;
+      ctl.setAttribute('aria-describedby', hint.id);
+    }
+  }
+}
+
+// 分段按钮、颜色、衣柜里的按钮：选中的是哪个
+function markPressed() {
+  for (const b of document.querySelectorAll('.seg button, #colors button, .items button:not(.peek)')) b.setAttribute('aria-pressed', String(b.classList.contains('on')));
+}
+
 function applyTexts() {
   document.documentElement.lang = I18N.lang();
   document.title = `${tr('app.name')} · ${tr('set.title')}`;
@@ -119,6 +142,7 @@ function renderAppearance() {
   );
 
   $('sound').setAttribute('aria-checked', String(config.sound !== false));
+  $('notify').setAttribute('aria-checked', String(config.notifyFullscreen !== false));
 
   const lang = $('lang');
   if (document.activeElement !== lang) {
@@ -255,6 +279,7 @@ function renderWardrobe() {
           b.onclick = () => update({ outfit: { [slot]: item } });
         } else {
           b.className = 'locked';
+          b.setAttribute('aria-disabled', 'true');
           b.title = `${tr(`item.${item}`)} · ${tr('set.locked', { how: a ? tr(`ach.${a.id}Desc`) : '?' })}`;
         }
         items.append(b);
@@ -268,8 +293,42 @@ function renderWardrobe() {
   $('holiday-hint').textContent = holiday ? tr('set.holidayNow', { name: tr(`holiday.${holiday.id}`) }) : tr('set.holidaysHint');
 }
 
+// 钓鱼图鉴：钓到过的画出来、写名字和次数；没钓到的只有灰色剪影和问号
+function renderFishdex() {
+  const caught = state.catches || {};
+  const list = CATCHES.CATCHES;
+  $('fishdex-count').textContent = tr('set.fishdexCount', { n: list.filter((c) => caught[c.id]).length, total: list.length });
+  $('fishdex-list').replaceChildren(
+    ...list.map((c) => {
+      const n = caught[c.id] || 0;
+      const li = document.createElement('li');
+      li.className = n ? '' : 'locked';
+      const cv = document.createElement('canvas');
+      const dpr = window.devicePixelRatio || 1;
+      cv.width = 32 * dpr;
+      cv.height = 24 * dpr;
+      drawGlyph(cv.getContext('2d'), c.glyph, 16 * dpr, 12 * dpr, Math.round(3 * dpr), n ? c.color : '#B8B2A8', n ? '#FFFFFF' : null);
+      const name = document.createElement('div');
+      name.textContent = n ? tr(`catch.${c.id}`) : '？？？';
+      const times = document.createElement('div');
+      const rare = CATCHES.rarity(c.id);
+      times.className = `times${rare !== 'common' ? ' rare' : ''}`;
+      times.textContent = n ? tr('set.fishdexTimes', { n }) : tr(`set.rarity.${rare}`);
+      li.append(cv, name, times);
+      return li;
+    })
+  );
+}
+
 function renderAchievements() {
   const list = state.achievements;
+  const lv = state.level;
+  $('level').hidden = !lv;
+  if (lv) {
+    $('level-name').textContent = tr('set.level', { n: lv.level, title: tr(`level.${lv.title}`) });
+    $('level-xp').textContent = tr('set.levelXp', { xp: lv.xp.toLocaleString(), next: lv.next.toLocaleString() });
+    $('level-bar').style.width = `${Math.round(((lv.xp - lv.cur) / Math.max(1, lv.next - lv.cur)) * 100)}%`;
+  }
   const palette = PALETTES[state.config.color || 0];
   $('ach-count').textContent = tr('set.achCount', { n: list.filter((a) => a.unlockedAt).length, total: list.length });
   $('ach-list').replaceChildren(
@@ -309,6 +368,44 @@ function renderPlay() {
   const { config } = state;
   $('dance').setAttribute('aria-checked', String(config.dance !== false));
   $('time-of-day').setAttribute('aria-checked', String(config.timeOfDay !== false));
+  $('hotkeys').setAttribute('aria-checked', String(!!config.hotkeys));
+  // 免打扰时段：打开了才显示几点到几点
+  $('quiet-hours').setAttribute('aria-checked', String(!!config.quietHours));
+  $('quiet-range').hidden = !config.quietHours;
+  for (const [id, key, def] of [['quiet-from', 'quietFrom', 22], ['quiet-to', 'quietTo', 8]]) {
+    const sel = $(id);
+    if (document.activeElement === sel) continue;
+    if (!sel.options.length) sel.append(...Array.from({ length: 24 }, (_, h) => new Option(`${h}:00`, String(h))));
+    sel.value = String(config[key] ?? def);
+  }
+  // 休息提醒：打开了才显示隔多久
+  $('break-reminder').setAttribute('aria-checked', String(config.breakReminder !== false));
+  $('break-min').hidden = config.breakReminder === false;
+  $('break-min').replaceChildren(
+    ...[45, 60, 90].map((m) => {
+      const b = document.createElement('button');
+      b.textContent = tr('set.minutes', { m });
+      b.className = (config.breakMin || 60) === m ? 'on' : '';
+      b.onclick = () => update({ breakMin: m });
+      return b;
+    })
+  );
+  $('cost-alert').replaceChildren(
+    ...[0, 5, 10, 20, 50].map((v) => {
+      const b = document.createElement('button');
+      b.textContent = v ? `$${v}` : tr('set.costOff');
+      b.className = (config.costAlert || 0) === v ? 'on' : '';
+      b.onclick = () => update({ costAlert: v });
+      return b;
+    })
+  );
+  $('quiet-now').hidden = !state.quietNow;
+  $('quiet-now').textContent = tr('set.quietNow');
+  // 打开了但有的快捷键被别的程序占了：说是哪个
+  const taken = Object.entries(state.hotkeys || {}).filter(([, ok]) => !ok).map(([name]) => ({ summon: 'Ctrl+Alt+O', arcade: 'Ctrl+Alt+G' })[name]);
+  const st = $('hotkeys-status');
+  st.hidden = !config.hotkeys || !taken.length;
+  if (taken.length) setStatus(st, false, tr('set.hotkeyTaken', { keys: taken.join(tr('punct.listSep')) }));
   $('pomodoro').replaceChildren(
     ...[15, 25, 45].map((m) => {
       const b = document.createElement('button');
@@ -460,14 +557,16 @@ function render() {
   }
   if (changed('appearance', [state.config, state.systemLocale])) renderAppearance();
   if (changed('wardrobe', [state.config.outfit, state.config.holidays, state.config.color, state.holiday, state.achievements])) renderWardrobe();
-  if (changed('achievements', [state.achievements, state.config.color])) renderAchievements();
+  if (changed('achievements', [state.achievements, state.config.color, state.level])) renderAchievements();
+  if (changed('fishdex', [state.catches])) renderFishdex();
   if (changed('feed', [state.config.feed, state.config.feedHint, state.config.feedDir, state.lastBite])) renderFeed();
-  if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin])) renderPlay();
+  if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin, state.config.hotkeys, state.hotkeys, state.config.quietHours, state.config.quietFrom, state.config.quietTo, state.quietNow, state.config.breakReminder, state.config.breakMin, state.config.costAlert])) renderPlay();
   if (changed('updates', [state.update, state.config.autoUpdate])) renderUpdates();
   if (changed('pets', state.pets)) renderPets();
   if (changed('events', state.events)) renderEvents();
   renderIntegration();
   $('autostart').setAttribute('aria-checked', String(!!state.autostart));
+  markPressed();
 }
 
 // ---------- 数据和操作 ----------
@@ -492,6 +591,17 @@ $('holidays').onclick = () => update({ holidays: state.config.holidays === false
 $('approve').onclick = () => update({ approveOnPet: !state.config.approveOnPet });
 $('dance').onclick = () => update({ dance: state.config.dance === false });
 $('time-of-day').onclick = () => update({ timeOfDay: state.config.timeOfDay === false });
+$('hotkeys').onclick = () => update({ hotkeys: !state.config.hotkeys });
+$('quiet-hours').onclick = () => update({ quietHours: !state.config.quietHours });
+$('break-reminder').onclick = () => update({ breakReminder: state.config.breakReminder === false });
+$('quiet-from').onchange = (e) => {
+  e.target.blur();
+  update({ quietFrom: Number(e.target.value) });
+};
+$('quiet-to').onchange = (e) => {
+  e.target.blur();
+  update({ quietTo: Number(e.target.value) });
+};
 $('feed').onclick = () => update({ feed: state.config.feed === false });
 $('feed-hint').onclick = () => update({ feedHint: state.config.feedHint === false });
 $('auto-update').onclick = () => update({ autoUpdate: state.config.autoUpdate === false });
@@ -500,11 +610,23 @@ $('feed-open').onclick = () => api.action('open-belly');
 $('spit').onclick = () => api.action('spit').then(refresh);
 $('tour').onclick = () => api.action('tour');
 $('sound').onclick = () => update({ sound: state.config.sound === false });
+$('notify').onclick = () => update({ notifyFullscreen: state.config.notifyFullscreen === false });
 $('report').onclick = () => api.action('report');
+$('arcade').onclick = () => api.action('arcade');
 $('lang').onchange = (e) => {
   e.target.blur();
   update({ lang: e.target.value });
 };
+// 备份：导出 / 从备份恢复（恢复成功会重启，这里看不到结果）
+for (const [id, action] of [['backup-export', 'export'], ['backup-import', 'import']]) {
+  $(id).onclick = async () => {
+    const r = await api.backup(action);
+    const st = $('backup-status');
+    if (!r || r.canceled) return;
+    st.hidden = false;
+    setStatus(st, r.ok, r.ok ? (r.file ? tr('set.backupSaved', { file: r.file }) : '') : r.error || '');
+  };
+}
 $('autostart').onclick = async () => {
   await api.autostart(!state.autostart);
   refresh();
@@ -548,6 +670,7 @@ function focusSection(id) {
   el.classList.add('flash');
 }
 if (api.onFocusSection) api.onFocusSection(focusSection);
+linkLabels();
 
 refresh()
   .then(() => focusSection(location.hash.slice(1)))

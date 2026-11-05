@@ -28,6 +28,19 @@ const GLYPHS = {
   leaf: ['.##', '###', '##.'],
   flake: ['#.#', '.#.', '#.#'],
   firefly: ['#'],
+  bubble: ['.##.', '#..#', '#..#', '.##.'],
+  // 钓上来的东西
+  fish: ['.###.#', '#####.', '.###.#'],
+  bug: ['#.#', '.#.', '###', '.#.'],
+  boot: ['.##.', '.##.', '.###', '####'],
+  sock: ['.##', '.##', '.##', '###', '##.'],
+  duckg: ['.##..', '###..', '.####', '.###.'],
+  floppy: ['####', '#..#', '####', '#.##'],
+  semi: ['.#.', '...', '.#.', '#..'],
+  key: ['#####', '#...#', '#.#.#', '#####'],
+  // git 提交冒出来的勾、推送放的小火箭（见 world.js 的 stamp / rocket）
+  check: ['....#', '...##', '#.##.', '###..', '.#...'],
+  rocket: ['..#..', '.###.', '.#.#.', '.###.', '.###.', '##.##', '#...#'],
 };
 
 // 画一组像素块，先描边再填色，让漂浮的小东西在任何壁纸上都看得清
@@ -110,6 +123,57 @@ function drawHead(px, blob, item, top, grow, t) {
     case 'chefhat':
       blob([[5, r(5), 6, 1], [4, r(4), 8, 1], [3, r(3), 10, 2], [4, r(1), 8, 1]], '#FFFFFF', '#B9BEC6');
       px(4, r(1), 8, 1, '#E3E6EA');
+      break;
+    case 'bugclip': {
+      // 捉虫大作战的成就：头顶右边别着一只小 Bug 发卡
+      const K = '#1F1611';
+      px(9, r(3), 1, 1, K); // 触角
+      px(12, r(3), 1, 1, K);
+      px(9, r(2), 4, 1, '#7DB85C');
+      px(10, r(2), 1, 1, K); // 眼睛
+      px(12, r(2), 1, 1, '#3F7A32');
+      px(9, r(1), 4, 1, '#5E9E45');
+      px(8, r(1), 1, 1, K); // 小脚
+      px(13, r(1), 1, 1, K);
+      break;
+    }
+    case 'buckethat':
+      // 钓鱼图鉴集齐：一顶橄榄绿的渔夫帽，帽檐软软地往下垂
+      px(5, r(3), 6, 1, '#8FA068');
+      px(4, r(2), 8, 1, '#7A8B5A');
+      px(5, r(2), 6, 1, '#5E6B44'); // 帽带
+      px(2, r(1), 12, 1, '#6B7A4E');
+      px(2, r(1) + 0.5, 1, 0.5, '#6B7A4E');
+      px(13, r(1) + 0.5, 1, 0.5, '#6B7A4E');
+      break;
+    case 'boxhat':
+      // 依赖膨胀的成就：头上顶一个纸箱，中间一道胶带，箱盖翘起来一点
+      px(4, r(4), 8, 4, '#B98A55');
+      px(4, r(4), 8, 1, '#CDA06A');
+      px(7, r(4), 2, 4, '#E6CFA0');
+      px(3, r(5), 2, 1, '#CDA06A'); // 翘起来的箱盖
+      break;
+    case 'firehelmet':
+      // 热修复的成就：红色消防头盔，前面一块金色徽章，后沿长一点
+      px(5, r(3), 6, 1, '#D63B2F');
+      px(4, r(2), 8, 1, '#D63B2F');
+      px(6, r(3), 2, 1, '#F06A5A'); // 高光
+      px(9, r(3), 2, 2, '#F2C14E'); // 徽章
+      px(1, r(1), 12, 1, '#A8271E'); // 帽沿，后面长
+      break;
+    case 'hardhat':
+      // 守护主分支的成就：黄色安全帽
+      px(5, r(3), 6, 1, '#F2C14E');
+      px(7, r(3), 2, 1, '#FFE08A'); // 中间那道棱
+      px(4, r(2), 8, 1, '#F2C14E');
+      px(7, r(2), 2, 1, '#FFE08A');
+      px(3, r(1), 11, 1, '#D9A22E'); // 帽檐，前面长一点
+      break;
+    case 'visor':
+      // 敲代码的成就：老式程序员戴的绿色遮光帽，帽檐半透明
+      px(4, r(2), 8, 1, '#3E8A4C');
+      px(3, r(1), 10, 1, '#2F6B3A'); // 帽带
+      px(11, r(1), 5, 1, 'rgba(110,205,130,0.8)'); // 往前伸的半透明帽檐
       break;
     case 'partyhat':
       px(5, r(1), 6, 1, '#F25F8A');
@@ -195,6 +259,40 @@ function drawFace(px, item, er, dx, under) {
       px(ex + 2, er, 1, 2, F);
     }
     if (!under) px(7 + dx, er, 2, 1, F);
+  } else if (item === 'goggles') {
+    // 窗口跳跳的成就：飞行护目镜，镜片带点蓝，两边有带子
+    const F = '#6B4226';
+    for (const ex of [4 + dx, 11 + dx]) {
+      if (under) {
+        px(ex - 1, er, 3, 2, 'rgba(140,200,255,0.55)');
+        continue;
+      }
+      px(ex - 2, er - 1, 5, 1, F);
+      px(ex - 2, er + 2, 5, 1, F);
+      px(ex - 2, er, 1, 2, F);
+      px(ex + 2, er, 1, 2, F);
+      px(ex + 1, er, 1, 1, '#FFFFFF'); // 反光
+    }
+    if (!under) {
+      px(7 + dx, er, 2, 1, F);
+      px(0, er, 2 + dx, 1, '#3A2A1E'); // 带子
+      px(14 + dx, er, 2 - dx, 1, '#3A2A1E');
+    }
+  } else if (item === 'monocle') {
+    // 调用栈的成就：右眼一片金边单片眼镜，下面垂一根链子
+    const ex = 11 + dx;
+    const F = '#D4A84B';
+    if (under) {
+      px(ex - 1, er, 3, 2, 'rgba(225,242,255,0.55)');
+    } else {
+      px(ex - 1, er - 1, 3, 1, F);
+      px(ex - 1, er + 2, 3, 1, F);
+      px(ex - 2, er, 1, 2, F);
+      px(ex + 2, er, 1, 2, F);
+      px(ex + 1, er, 1, 1, '#FFFFFF'); // 反光
+      px(ex + 2, er + 3, 1, 1, '#B98A2E'); // 链子
+      px(ex + 3, er + 4, 1, 1, '#B98A2E');
+    }
   } else if (item === 'sunglasses' && !under) {
     for (const lx of [2 + dx, 9 + dx]) {
       px(lx, er, 5, 2, '#16161A');
@@ -248,6 +346,51 @@ function drawNeck(px, item, top, grow, bottom) {
     for (let c = x0 + 1; c < x0 + w; c += 3) px(c, top + 5, 1, 2, L);
     px(3 - grow, top + 7, 2, 2, S); // 垂下来的一截
     px(3 - grow, top + 9, 2, 1, L);
+  } else if (item === 'shield') {
+    // 批准还是拒绝的成就：胸前一枚盾牌徽章，中间一个勾（深藏青，六种主色上都看得清）
+    const B = '#24346B';
+    px(6, top + 4, 4, 1, '#F2C14E'); // 金边
+    px(6, top + 5, 4, 1, B);
+    px(6, top + 6, 4, 1, B);
+    px(7, top + 7, 2, 1, B);
+    px(8, top + 5, 1, 1, '#FFFFFF');
+    px(7, top + 6, 1, 1, '#FFFFFF');
+  } else if (item === 'lanyard') {
+    // 养成等级 10 级：脖子上挂一张工牌
+    const L = '#3B6FD6';
+    px(4, top + 3, 1, 1, L);
+    px(11, top + 3, 1, 1, L);
+    px(5, top + 4, 1, 1, L);
+    px(10, top + 4, 1, 1, L);
+    px(6, top + 5, 4, 3, '#F4F1EA');
+    px(6, top + 5, 4, 1, L);
+    px(7, top + 6, 1, 1, '#D97757'); // 照片
+    px(8, top + 6, 1, 1, '#B8BEC9');
+  } else if (item === 'cape') {
+    // 养成等级 25 级：背后一件红披风，领口一道深红
+    const R = '#C2452D';
+    px(2, top + 2, 12, 1, '#8E2F1F');
+    px(0, top + 3, 2, bottom - top - 3, R);
+    px(0, bottom - 1, 1, 2, R);
+    px(1, bottom, 1, 1, '#8E2F1F');
+  } else if (item === 'necktie') {
+    // 提交 100 次的成就：一条深蓝色领带，中间一道金色斜纹
+    const N = '#2B4C9B';
+    px(7, top + 3, 2, 1, '#1E3570'); // 领结
+    px(7, top + 4, 2, 2, N);
+    px(6, top + 6, 4, 1, N);
+    px(7, top + 7, 2, 1, N);
+    px(7, top + 5, 1, 1, '#F2C14E');
+    px(8, top + 6, 1, 1, '#F2C14E');
+  } else if (item === 'medal') {
+    // 今日挑战连续打卡的成就：红蓝绶带挂一枚金牌
+    px(6, top + 3, 1, 1, '#3D6FD9');
+    px(9, top + 3, 1, 1, '#D94F4F');
+    px(7, top + 4, 1, 1, '#3D6FD9');
+    px(8, top + 4, 1, 1, '#D94F4F');
+    px(6, top + 5, 4, 2, '#F2C14E');
+    px(7, top + 7, 2, 1, '#D9A22E');
+    px(7, top + 5, 1, 1, '#FFE08A'); // 反光
   } else if (item === 'plaid') {
     // 程序员节：格子衫（盖住下半身）
     const x0 = 2 - grow;
@@ -518,6 +661,57 @@ function drawPet(ctx, x, y, P, pal, flip, pose) {
     px(14, top + 4, 1, 1, '#F4F1EA');
     px(12, top + 3, 2, 1, '#6B4A2B');
     steam(12, top + 1);
+  }
+  // 钓鱼：手里一根鱼竿伸出去，鱼线垂到窗口下面（pose.line 是线有多长，按格算；咬钩时浮漂沉下去）
+  if (has('rod')) {
+    const R = '#8B5A3C';
+    for (let k = 0; k < 6; k++) px(14 + k, top + 4 - k, 1, 1, R);
+    const tipY = top - 1;
+    const len = Math.max(2, 10 + (pose.line || 8) - tipY);
+    px(19.4, tipY, 0.25, len, 'rgba(240,240,240,0.75)');
+    const by = tipY + len + (pose.bite ? 0.5 : 0);
+    px(19, by - 1, 1, 1, '#E5484D');
+    px(19, by, 1, 1, '#FFFFFF');
+  }
+  // 一起钓鱼：脚边一只小铁桶（按地面算）
+  if (has('bucket')) {
+    px(17, 6, 5, 4, '#9AA3B2');
+    px(17, 6, 5, 1, '#C9CFD9');
+    px(18, 7, 3, 1, '#5B9BD5'); // 桶里的水
+    px(16, 5, 1, 1, '#6B7080');
+    px(22, 5, 1, 1, '#6B7080');
+    px(17, 4, 5, 1, '#6B7080'); // 提手
+  }
+  // 休息提醒：递过来一杯水
+  if (has('glass')) {
+    px(16, top + 1, 3, 5, 'rgba(225,242,255,0.9)');
+    px(16, top + 3, 3, 3, '#7CC4FA');
+    px(16, top + 1, 3, 1, '#FFFFFF');
+  }
+  // 举哑铃：举起来在头顶，放下在胸前（pose.lift）
+  if (has('dumbbell')) {
+    const row = pose.lift ? top - 3 : top + 5;
+    px(1, row, 14, 1, '#6B7080');
+    px(0, row - 1, 2, 3, '#3A3F4E');
+    px(14, row - 1, 2, 3, '#3A3F4E');
+  }
+  // 小黄鸭调试：脚边一只小黄鸭，面朝小章鱼（坐标按地面算，不跟身体动）
+  if (has('duck')) {
+    const Y = '#FFD43B';
+    px(18, 5, 2, 2, Y); // 头
+    px(17, 6, 1, 1, '#F08A24'); // 嘴
+    px(18, 5, 1, 1, INK); // 眼睛
+    px(18, 7, 4, 3, Y); // 身子
+    px(21, 6, 1, 1, Y); // 尾巴
+    px(19, 8, 2, 1, '#E8B92E'); // 翅膀
+  }
+  // 吹泡泡：手里一根小棒，顶上一个圈
+  if (has('wand')) {
+    px(15, top + 1, 1, 3, '#A0663A');
+    px(14, top - 2, 3, 1, '#BFE6FF');
+    px(14, top, 3, 1, '#BFE6FF');
+    px(14, top - 1, 1, 1, '#BFE6FF');
+    px(16, top - 1, 1, 1, '#BFE6FF');
   }
   if (has('handheld')) {
     px(5, top + 5, 6, 3, '#3A3A3F');

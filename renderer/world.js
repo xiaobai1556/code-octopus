@@ -7,7 +7,7 @@ const SESSION_STALE = 45 * 60 * 1000;
 const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
 
-const stats = { renders: 0, ticks: 0, platformUpdates: 0, rideMoves: 0, mouseMoves: 0, pushes: 0, rides: [], input: [] };
+const stats = { renders: 0, ticks: 0, platformUpdates: 0, rideMoves: 0, mouseMoves: 0, pushes: 0, rides: [], input: [], frameErrors: 0, lastFrameError: '' };
 
 // [频率, 开始时间, 时长]
 const SOUNDS = {
@@ -38,6 +38,7 @@ const world = {
   ridingUntil: 0, // 有桌宠正被窗口带着走时，位置一变就立刻重画
   pets: [],
   particles: [],
+  fakeIcons: [], // 小章鱼拖着玩的假图标（只画出来，不接收点击，和真的文件没关系）
   mouse: null,
   greeted: {},
   // 多显示器：这块屏是不是主屏（第一只小章鱼在这里出生），左右边上通往别的屏的口子 { to, y1, y2 }
@@ -268,7 +269,7 @@ const world = {
     if (!this.timeOfDay) return 'day';
     const h = d.getHours() + d.getMinutes() / 60;
     if (h >= 1 && h < 5) return 'late';
-    if (h >= 22 || h < 1 || h < 6) return 'night';
+    if (h >= 22 || h < 6) return 'night';
     if (h < 9.5) return 'morning';
     return 'day';
   },
@@ -380,7 +381,7 @@ const world = {
       return tr(pomo.phase === 'focus' ? 'pomo.focusLeft' : 'pomo.breakLeft', { t: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` });
     }
     const notes = this.noteHolder() === pet ? this.myNotes() : [];
-    if (notes.length) return `${tr('note.label', { n: notes.length })}：${notes[notes.length - 1].text}`;
+    if (notes.length) return `${tr('note.label', { n: notes.length })}${tr('punct.colon')}${notes[notes.length - 1].text}`;
     return '';
   },
 
@@ -635,6 +636,77 @@ const world = {
       this.particles.push({ kind: 'square', x: pet.x + rand(-6, 6), y: pet.y - pet.height * 0.45, vx: rand(-90, 90), vy: rand(-200, -60), g: 900, life: rand(0.5, 0.9), max: 0.9, size: pet.Pd * 0.5, color: pick(['#F4F1EA', '#C9B8A3', '#FFE066']) });
     }
   },
+  // 拖图标：在小章鱼身后冒出一个假的桌面图标
+  spawnIcon(pet, opts = {}) {
+    this.releaseIcon(pet); // 手里已经拖着一个：先放下
+    if (opts.game) {
+      // 两只一起拖的大图标：位置由那一局摆，结束时那一局松手
+      const label = pick(tr('haul.bigItems').split('|'));
+      const icon = { label, type: 'folder', x: pet.x, y: pet.y, holder: null, game: opts.game, big: true, born: performance.now(), leftAt: 0 };
+      this.fakeIcons.push(icon);
+      this.poof(icon.x, icon.y - pet.Pd * 5);
+      return icon;
+    }
+    const names = tr('haul.items').split('|');
+    const label = pick(names);
+    const ext = (label.match(/\.(\w+)$/) || [])[1] || '';
+    const type = { txt: 'doc', md: 'doc', docx: 'word', js: 'js', png: 'image', psd: 'image', zip: 'zip' }[ext.toLowerCase()] || 'folder';
+    const icon = { label, type, x: 0, y: 0, holder: pet, born: performance.now(), leftAt: 0 };
+    this.fakeIcons.push(icon);
+    pet.haulIcon = icon;
+    this.followIcon(icon);
+    this.poof(icon.x, icon.y - pet.Pd * 4);
+  },
+  // 拖着的图标跟在身后
+  followIcon(icon) {
+    const pet = icon.holder;
+    icon.x = pet.x - pet.facing * (pet.halfW + pet.Pd * 5);
+    icon.y = pet.y;
+  },
+  releaseIcon(pet) {
+    const icon = pet.haulIcon;
+    pet.haulIcon = null;
+    if (!icon) return;
+    icon.holder = null;
+    icon.leftAt = performance.now();
+  },
+  // 钓上来一样东西：从浮漂那儿划一道弧飞到小章鱼手里
+  catchSomething(pet, into = null) {
+    const c = CATCHES.pick();
+    const x0 = pet.x + pet.facing * 11 * pet.Pd;
+    const y0 = pet.y + 9 * pet.Pd;
+    // 一起钓鱼时飞进旁边那只的桶里，不然飞到自己手里
+    const x1 = into ? into.x + into.facing * into.halfW * 1.2 : pet.x + pet.facing * pet.halfW * 0.5;
+    const y1 = into ? into.y - into.Pd * 4 : pet.y - pet.height;
+    const T = 0.8;
+    const g = 700;
+    this.particles.push({ kind: c.glyph, x: x0, y: y0, vx: (x1 - x0) / T, vy: (y1 - y0) / T - 0.5 * g * T, g, life: T + 0.25, max: T + 0.25, size: pet.Pd * 0.8, color: c.color });
+    const name = tr(`catch.${c.id}`);
+    const rare = CATCHES.rarity(c.id) !== 'common';
+    if (rare) setTimeout(() => this.sparkles(pet), T * 1000);
+    // 记进图鉴；第一次钓到的说一声"新收录"
+    const said = (r) => {
+      if (r && r.isNew) pet.say(tr('catch.new', { name }), 2.6, false, { sub: tr('catch.progress', { n: r.kinds, total: CATCHES.CATCHES.length }) });
+      else if (rare || Math.random() < 0.4) pet.say(tr('catch.got', { name }), 1.8);
+    };
+    if (host && host.caught) host.caught(c.id).then(said, () => said(null));
+    else said(null);
+  },
+  // 吹泡泡：从小棒那儿飘出去，慢慢往上飘、左右晃
+  soapBubble(pet) {
+    const colors = ['#BFE6FF', '#E6CCFF', '#CCF5E1', '#FFE0F0'];
+    this.particles.push({ kind: 'bubble', x: pet.x + pet.facing * (pet.halfW + pet.Pd), y: pet.y - pet.height - pet.Pd, vx: pet.facing * rand(14, 30), vy: rand(-26, -12), g: -6, sway: 18, phase: rand(0, 6), life: rand(2.2, 3.4), max: 3.4, size: pet.Pd * rand(0.55, 0.8), color: pick(colors), outline: 'rgba(255,255,255,0.85)' });
+  },
+  // git 提交：身边冒一个绿色的勾（头顶是气泡，会挡住），再撒几颗星星
+  stamp(pet) {
+    this.particles.push({ kind: 'check', x: pet.x + pet.facing * (pet.halfW + pet.Pd * 4), y: pet.y - pet.height * 0.6, vx: pet.facing * 6, vy: -22, g: 0, life: 1.6, max: 1.6, size: pet.Pd * 0.9, color: '#3F9A5B' });
+    this.sparkles(pet);
+  },
+  // git 推送：放一枚小火箭，越飞越快，屁股后面喷火（喷火见 tick 里的 rocketTrails）
+  rocket(pet) {
+    this.particles.push({ kind: 'rocket', x: pet.x + pet.facing * pet.halfW, y: pet.y - pet.height * 0.6, vx: pet.facing * 10, vy: -30, g: -520, life: 1.7, max: 1.7, size: pet.Pd * 0.7, color: '#F4F1EA', outline: '#D97757' });
+    this.poof(pet.x + pet.facing * pet.halfW, pet.y - pet.height * 0.3);
+  },
   poof(x, y) {
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * Math.PI * 2;
@@ -658,7 +730,22 @@ resize();
 
 // ---------- 气泡（Claude 风格：米白圆角、转圈的星星、字幕会折行和逐字出现） ----------
 const BUBBLE = { bg: '#FBF8F3', alertBg: '#FFF4EC', greenBg: '#F1FAF3', border: '#E4D9C9', ink: '#2B2620', muted: '#857869', accent: '#D97757', green: '#3F9A5B' };
-const UI_FONT = '"Segoe UI","Microsoft YaHei UI","Yu Gothic UI","PingFang SC",sans-serif';
+// 汉字按语言挑字体：中日文共用的汉字在不同字体里字形不一样，日文要用日文字体、繁体要用繁体字体
+const CJK_FONTS = {
+  'zh-CN': '"Microsoft YaHei UI","PingFang SC"',
+  'zh-TW': '"Microsoft JhengHei UI","PingFang TC"',
+  ja: '"Yu Gothic UI","Meiryo UI","Hiragino Sans"',
+  en: '"Microsoft YaHei UI","Yu Gothic UI","PingFang SC"',
+};
+let UI_FONT = '';
+let MONO_FONT = '';
+function setFonts(lang) {
+  const cjk = CJK_FONTS[lang] || CJK_FONTS.en;
+  UI_FONT = `"Segoe UI",${cjk},sans-serif`;
+  MONO_FONT = `"Cascadia Mono",Consolas,${cjk},monospace`;
+  document.documentElement.lang = lang;
+}
+setFonts(I18N.lang());
 const CJK = '\\u2e80-\\u9fff\\uac00-\\ud7af\\uf900-\\ufaff\\uff00-\\uffef\\u3000-\\u303f';
 const TOKEN = new RegExp(`[${CJK}]|\\s+|[^\\s${CJK}]+`, 'g');
 const wrapCache = new Map();
@@ -689,8 +776,11 @@ function wrapLines(text, maxW, maxLines) {
   }
   if (line.trim()) lines.push(line.trimEnd());
   let out = lines;
+  // truncated：放不下、末尾加了省略号（批准气泡靠它判断命令有没有显示全）
+  out.truncated = lines.length > maxLines;
   if (lines.length > maxLines) {
     out = lines.slice(0, maxLines);
+    out.truncated = true;
     let tail = out[maxLines - 1];
     while (tail && ctx.measureText(tail + '…').width > maxW) tail = tail.slice(0, -1);
     out[maxLines - 1] = tail + '…';
@@ -699,6 +789,11 @@ function wrapLines(text, maxW, maxLines) {
   wrapCache.set(key, out);
   return out;
 }
+
+// 批准按钮停稳多久才能点、挪动多少算"挪了地方"（DIP）
+const BUTTON_ARM_MS = 700;
+const BUTTON_DRIFT = 4;
+const buttonsArmed = (pet) => !!pet.buttonAnchor && performance.now() - pet.buttonAnchor.at >= BUTTON_ARM_MS;
 
 // th < 0：尾巴画在上边、朝上指（气泡放在桌宠下面时）
 function bubblePath(x, y, w, h, r, tx, tw, th) {
@@ -729,7 +824,7 @@ function drawBubble(pet, v) {
   const dpr = world.dpr;
   const S = (n) => Math.round(n * dpr);
   const titleFont = `${v.important ? 700 : 600} ${S(13)}px ${UI_FONT}`;
-  const subFont = v.code ? `${S(12)}px "Cascadia Mono",Consolas,"Microsoft YaHei UI",monospace` : `${S(12)}px ${UI_FONT}`;
+  const subFont = v.code ? `${S(12)}px ${MONO_FONT}` : `${S(12)}px ${UI_FONT}`;
   const metaFont = `${S(12)}px ${UI_FONT}`;
   const glyphFont = `${S(14)}px "Segoe UI Symbol","Segoe UI",sans-serif`;
   const padX = S(10);
@@ -739,7 +834,6 @@ function drawBubble(pet, v) {
   const glow = v.alert || v.celebrate; // 举牌子时的气泡：橙色（等你决定）或绿色（做完了 / 日报）发光
   const accent = v.celebrate ? BUBBLE.green : BUBBLE.accent;
   const hintFont = `600 ${S(11)}px ${UI_FONT}`;
-  const hintH = v.hint ? S(17) : 0;
   const maxW = S(glow ? 290 : 250);
 
   ctx.font = glyphFont;
@@ -755,23 +849,31 @@ function drawBubble(pet, v) {
   ctx.font = subFont;
   const subLines = sub ? wrapLines(sub, maxW, v.subLines || 3) : [];
   for (const l of subLines) w = Math.max(w, ctx.measureText(l).width);
-  if (v.hint) {
+  // 在桌宠上批准：要批准的内容显示不全（危险的部分可能正好在省略号后面）就不给「允许」，让你去终端看完整的
+  let buttons = v.buttons;
+  let hint = v.hint;
+  if (buttons && (subLines.truncated || v.askClipped)) {
+    buttons = buttons.filter(([key]) => key !== 'allow');
+    hint = tr('ask.tooLong');
+  }
+  const hintH = hint ? S(17) : 0;
+  if (hint) {
     ctx.font = hintFont;
-    w = Math.max(w, ctx.measureText(`↩ ${v.hint}`).width);
+    w = Math.max(w, ctx.measureText(`↩ ${hint}`).width);
   }
   // 一排按钮（在桌宠上批准：允许 / 拒绝 / 去终端）
   const btnFont = `600 ${S(12)}px ${UI_FONT}`;
   const btnH = S(24);
   const btnGap = S(6);
   let btnW = [];
-  if (v.buttons) {
+  if (buttons) {
     ctx.font = btnFont;
-    btnW = v.buttons.map(([, label]) => Math.ceil(ctx.measureText(label).width) + S(22));
+    btnW = buttons.map(([, label]) => Math.ceil(ctx.measureText(label).width) + S(22));
     w = Math.max(w, btnW.reduce((a, b) => a + b, 0) + btnGap * (btnW.length - 1));
   }
 
   w = Math.ceil(w) + padX * 2;
-  const btnRowH = v.buttons ? S(8) + btnH : 0;
+  const btnRowH = buttons ? S(8) + btnH : 0;
   const h = padY * 2 + titleLines.length * lineH + (subLines.length ? S(2) + subLines.length * subH : 0) + hintH + btnRowH;
   const tailW = S(6);
   const tailH = S(7);
@@ -780,7 +882,7 @@ function drawBubble(pet, v) {
   const jumping = a && ((a.kind === 'alert' && a.urgent) || a.kind === 'done') ? 38 : 0;
   const head = pet.y - pet.height - pet.overhead() - jumping;
   // 带按钮的气泡不跟着左右晃，按钮才点得准
-  const cx = Math.round((pet.x + (v.buttons ? 0 : pet.lastSway || 0)) * dpr);
+  const cx = Math.round((pet.x + (buttons ? 0 : pet.lastSway || 0)) * dpr);
   const x = clamp(Math.round(cx - w / 2), S(4), canvas.width - w - S(4));
   // 头顶放不下（站在贴着屏幕顶的窗口上）：放到脚下面，免得盖住举着的牌子
   const above = Math.round((head - 8) * dpr) - h - tailH;
@@ -788,7 +890,7 @@ function drawBubble(pet, v) {
   const y = below ? Math.min(canvas.height - h - S(4), Math.round((pet.y + 6) * dpr) + tailH) : above;
   const tx = clamp(cx, x + S(9) + tailW, x + w - S(9) - tailW);
   // 气泡占的地方（DIP）：鼠标靠近带按钮的气泡时，桌宠停下来等你点
-  pet.bubbleBox = v.buttons ? { l: x / dpr, t: y / dpr, r: (x + w) / dpr, b: (y + h) / dpr } : null;
+  pet.bubbleBox = buttons ? { l: x / dpr, t: y / dpr, r: (x + w) / dpr, b: (y + h) / dpr } : null;
 
   ctx.save();
   ctx.globalAlpha = v.alpha;
@@ -836,22 +938,32 @@ function drawBubble(pet, v) {
   }
 
   // 最后一行小字提示：点我回到会话
-  if (v.hint) {
+  if (hint) {
     ctx.font = hintFont;
     ctx.fillStyle = accent;
-    ctx.fillText(`↩ ${v.hint}`, x + padX, y + h - padY - btnRowH - hintH / 2);
+    ctx.fillText(`↩ ${hint}`, x + padX, y + h - padY - btnRowH - hintH / 2);
   }
 
   // 按钮：记下位置（DIP），点击范围和主进程的穿透判断都要用
   pet.buttonRects = null;
-  if (v.buttons) {
+  if (!buttons) pet.buttonAnchor = null;
+  if (buttons) {
     pet.buttonRects = [];
     let bx = x + padX;
     const by = y + h - padY - btnH;
+    // 防误触：按钮出现（或者挪了地方、换了一个请求）以后要停稳一会儿才能点，
+    // 免得它蹦到你正要点的地方，你本来点别处的那一下就成了「允许」。没停稳时按钮画得淡一些
+    const anchor = pet.buttonAnchor;
+    const askId = pet.ask ? pet.ask.id : 0;
+    if (!anchor || anchor.askId !== askId || Math.abs(anchor.x - bx / dpr) > BUTTON_DRIFT || Math.abs(anchor.y - by / dpr) > BUTTON_DRIFT) {
+      pet.buttonAnchor = { askId, x: bx / dpr, y: by / dpr, at: performance.now() };
+    }
+    const armed = buttonsArmed(pet);
+    ctx.globalAlpha = v.alpha * (armed ? 1 : 0.45);
     ctx.font = btnFont;
-    v.buttons.forEach(([key, label], i) => {
+    buttons.forEach(([key, label], i) => {
       const bw = btnW[i];
-      const hot = world.hoverButton && world.hoverButton.pet === pet && world.hoverButton.key === key;
+      const hot = armed && world.hoverButton && world.hoverButton.pet === pet && world.hoverButton.key === key;
       const style = key === 'allow' ? { fill: hot ? '#4CAF6A' : BUBBLE.green, ink: '#FFFFFF', line: BUBBLE.green } : key === 'deny' ? { fill: hot ? '#FBE3DF' : '#FFFFFF', ink: '#B4372A', line: '#E3A69C' } : { fill: hot ? '#F1ECE4' : '#FFFFFF', ink: BUBBLE.ink, line: BUBBLE.border };
       ctx.beginPath();
       ctx.roundRect(bx, by, bw, btnH, btnH / 2);
@@ -878,7 +990,7 @@ function drawCard(pet, v) {
   const titleFont = `700 ${S(13)}px ${UI_FONT}`;
   const rowFont = `${S(12)}px ${UI_FONT}`;
   const metaFont = `${S(11.5)}px ${UI_FONT}`;
-  const codeFont = `${S(11.5)}px "Cascadia Mono",Consolas,"Microsoft YaHei UI",monospace`;
+  const codeFont = `${S(11.5)}px ${MONO_FONT}`;
   const iconFont = `700 ${S(12)}px "Segoe UI Symbol","Segoe UI",sans-serif`;
   const padX = S(12);
   const padY = S(9);
@@ -962,7 +1074,7 @@ function drawCard(pet, v) {
     ty += S(17);
   });
   ctx.restore();
-  pet.buttonRects = null;
+  pet.buttonRects = pet.buttonAnchor = null;
 }
 
 function measureWith(font, text) {
@@ -1004,6 +1116,7 @@ function render(poses, views) {
   if (!host) drawPreviewWindows();
   const dpr = world.dpr;
 
+  drawIcons(performance.now());
   for (const pet of drawOrder()) pet.draw(ctx, poses.get(pet));
   world.games.draw(ctx);
   world.teaser.draw(ctx);
@@ -1022,9 +1135,83 @@ function render(poses, views) {
 
   for (const pet of world.pets) {
     const v = views.get(pet);
-    if (!v) pet.buttonRects = pet.bubbleBox = null;
+    if (!v) pet.buttonRects = pet.bubbleBox = pet.buttonAnchor = null;
     else if (v.card) drawCard(pet, v);
     else drawBubble(pet, v);
+  }
+}
+
+// 假图标：拖着的跟着小章鱼；放下的待一会儿慢慢淡掉
+const ICON_STAY_MS = 7000;
+const ICON_FADE_MS = 1000;
+function updateIcons(now) {
+  for (const icon of world.fakeIcons) {
+    if (icon.game) continue; // 两只一起拖的：那一局管
+    // 被叫去干活、被拖起来、被转到别的屏，或者它手里换成了别的图标：松手
+    const pet = icon.holder;
+    if (pet && (!world.pets.includes(pet) || !['haul', 'haulStart'].includes(pet.mode) || pet.haulIcon !== icon)) {
+      if (pet.haulIcon === icon) pet.haulIcon = null;
+      icon.holder = null;
+      icon.leftAt = now;
+    }
+    if (icon.holder) world.followIcon(icon);
+  }
+  world.fakeIcons = world.fakeIcons.filter((icon) => icon.holder || icon.game || now - icon.leftAt < ICON_STAY_MS + ICON_FADE_MS);
+}
+
+function iconAlpha(icon, now) {
+  const appear = Math.min(1, (now - icon.born) / 250);
+  const fade = icon.holder || icon.game ? 1 : 1 - Math.max(0, now - icon.leftAt - ICON_STAY_MS) / ICON_FADE_MS;
+  return Math.max(0, Math.min(appear, fade));
+}
+
+// 画一个像素风的桌面图标，下面是名字（像桌面上那样带一块半透明底）
+function drawIcons(now) {
+  const dpr = world.dpr;
+  for (const icon of world.fakeIcons) {
+    const a = iconAlpha(icon, now);
+    if (a <= 0) continue;
+    const u = Math.max(1, Math.round((icon.big ? 4.4 : 2.8) * dpr)); // 一格多少设备像素（两只一起拖的大一圈）
+    const x0 = Math.round(icon.x * dpr - 6 * u);
+    const y0 = Math.round(icon.y * dpr - 13 * u);
+    const r = (x, y, w, h, c) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(x0 + x * u, y0 + y * u, w * u, h * u);
+    };
+    ctx.globalAlpha = a;
+    // 描一圈白边，放在什么颜色的窗口上都看得清
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(x0 - u, y0 - u, 14 * u, 14 * u);
+    if (icon.type === 'folder') {
+      r(0, 1, 5, 2, '#E3A92E');
+      r(0, 2, 12, 10, '#F5C952');
+      r(0, 4, 12, 1, '#E3B23E');
+    } else {
+      r(1, 0, 10, 12, '#FAFAFA');
+      r(8, 0, 3, 3, '#D8D8D8');
+      for (let k = 0; k < 4; k++) r(3, 4 + k * 2, k % 2 ? 5 : 6, 1, '#B8BEC9');
+      const band = { word: '#3B6FD6', js: '#E8C82E', image: '#4FAE6B', zip: '#9A6AD6', doc: '#8A93A6' }[icon.type];
+      if (band) r(1, 9, 10, 3, band);
+    }
+    // 名字
+    ctx.font = `${Math.round(10.5 * dpr)}px ${UI_FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const tw = ctx.measureText(icon.label).width;
+    const lx = icon.x * dpr;
+    const ly = y0 + 13 * u + Math.round(2 * dpr);
+    ctx.fillStyle = 'rgba(24,36,72,0.62)';
+    ctx.fillRect(Math.round(lx - tw / 2 - 3 * dpr), ly - Math.round(1 * dpr), Math.round(tw + 6 * dpr), Math.round(14 * dpr));
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(icon.label, lx, ly);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// 飞着的小火箭每一帧往下喷几粒火
+function rocketTrails() {
+  for (const q of world.particles.filter((p) => p.kind === 'rocket' && p.life > 0.15 && p.y > -50)) {
+    world.particles.push({ kind: 'square', x: q.x + rand(-1, 1) * q.size, y: q.y + q.size * 3.5, vx: rand(-25, 25), vy: rand(30, 70), g: 0, life: 0.35, max: 0.35, size: q.size * rand(0.7, 1.1), color: pick(['#FFB347', '#FFD43B', '#F25F5C']) });
   }
 }
 
@@ -1040,8 +1227,13 @@ function drawOrder() {
 
 // ---------- 主循环 ----------
 // Windows 上透明窗口每画一帧都要整屏回读再提交，代价不小，所以只在画面真的变了才重画：
-// 待着不动时只有眨眼、呼吸才画；走路限 20 帧；被拖着、在空中、有粒子、举牌子跳时 60 帧
+// 待着不动时只有眨眼、呼吸才画；走路限 20 帧；只有慢慢飘的粒子（睡觉的 z 之类）时 15 帧；
+// 被拖着、在空中、有彩纸之类的快粒子、举牌子跳时 60 帧
 //（高刷屏上 requestAnimationFrame 可能是 144/240Hz，不能每次都画）。
+// 模拟也一样：不拖着、不在空中、不被窗口带着走时，离上一次不到 12ms 就跳过，高刷屏上也只跑 60~80 次每秒
+const TICK_MIN_MS = 12;
+const SLOW_PARTICLES = new Set(['z', 'note', 'petal', 'leaf', 'flake', 'firefly', 'bubble']);
+const SLOW_DRAW_MS = 66;
 let last = performance.now();
 let lastDraw = 0;
 let lastSig = '';
@@ -1061,10 +1253,33 @@ function signature(poses, views) {
     const v = views.get(p);
     s += `${Math.round(p.x * dpr)},${Math.round(p.y * dpr)},${p.P},${anim},${JSON.stringify(q)},${v ? JSON.stringify({ ...v, alpha: Math.round(v.alpha * 10) }) : ''};`;
   }
+  // 假图标淡入淡出时也要重画
+  const now = performance.now();
+  for (const icon of world.fakeIcons) s += `i${Math.round(icon.x * dpr)},${Math.round(icon.y * dpr)},${Math.round(iconAlpha(icon, now) * 20)};`;
   return s;
 }
 
+// 某一帧里出了错（比如收到一个没想到的事件）也要接着排下一帧，不然动画就永远停了：
+// 小章鱼定在原地，主进程还拿着它最后的点击范围，屏幕上那一块一直吃掉你的点击
 function frame(now) {
+  try {
+    const hot = drag || now < world.ridingUntil || world.pets.some((p) => p.mode === 'drag' || !p.ground);
+    if (hot || now - last >= TICK_MIN_MS) tick(now);
+  } catch (err) {
+    noteFrameError(err);
+  } finally {
+    requestAnimationFrame(frame);
+  }
+}
+
+// 出过的错记在 stats 里（/state 能看到），控制台只打前几次
+function noteFrameError(err) {
+  stats.frameErrors++;
+  stats.lastFrameError = String((err && err.stack) || err).slice(0, 600);
+  if (stats.frameErrors <= 3) console.error('[code-octopus] frame error:', err);
+}
+
+function tick(now) {
   stats.ticks++;
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
@@ -1076,6 +1291,8 @@ function frame(now) {
     q.life -= dt;
   }
   world.particles = world.particles.filter((q) => q.life > 0);
+  rocketTrails();
+  updateIcons(now);
 
   const poses = new Map(world.pets.map((p) => [p, p.pose()]));
   for (const [p, q] of poses) p.notePose(q);
@@ -1118,20 +1335,23 @@ function frame(now) {
   // 举着牌子的气泡在发光、或者正举着牌子蹦：按 60 帧画
   const glowing = [...views.values()].some((v) => v && (v.alert || v.celebrate));
   const dancing = world.music && world.pets.some((p) => p.mode === 'dance' || p.activity);
-  const fast = glowing || dancing || world.teaser.on || !!world.games.current || world.particles.length > 0 || world.pets.some((p) => !p.ground || p.mode === 'drag' || (p.activity && p.activity.kind === 'alert' && p.activity.urgent));
+  const lively = world.particles.some((q) => !SLOW_PARTICLES.has(q.kind)); // 彩纸、星星、爱心这些快的
+  const fast = glowing || dancing || world.teaser.on || !!world.games.current || lively || world.pets.some((p) => !p.ground || p.mode === 'drag' || (p.activity && p.activity.kind === 'alert' && p.activity.urgent));
+  // 只有慢慢飘的粒子：每帧都在动（签名里没有粒子），但 15 帧就够了。睡着时一直冒 z，按 60 帧画太浪费
+  const drifting = !fast && world.particles.length > 0;
   const walking = world.pets.some((p) => p.mode === 'walk' || p.mode === 'run');
   const riding = now < world.ridingUntil;
   // 被拖着、被扔在半空：跟着屏幕刷新率每帧都画（高刷屏上限 60 帧会一跳一跳的），画一帧不到 1ms
   const flying = world.pets.some((p) => p.mode === 'drag' || !p.ground);
-  if (now - lastDraw >= (riding || flying ? 0 : fast ? 15 : walking ? 50 : 33)) {
-    const sig = fast ? '' : signature(poses, views);
-    if (fast || sig !== lastSig) {
+  if (now - lastDraw >= (riding || flying ? 0 : fast ? 15 : walking ? 50 : drifting ? SLOW_DRAW_MS : 33)) {
+    const force = fast || drifting;
+    const sig = force ? '' : signature(poses, views);
+    if (force || sig !== lastSig) {
       lastSig = sig;
       lastDraw = now;
       render(poses, views);
     }
   }
-  requestAnimationFrame(frame);
 }
 
 // ---------- 鼠标：平时穿透，指到桌宠身上才接管 ----------
@@ -1187,6 +1407,11 @@ function buttonAt(x, y) {
 
 function pressStart(x, y, t) {
   const btn = buttonAt(x, y);
+  if (btn && !buttonsArmed(btn.pet)) {
+    // 按钮刚出现、还没停稳：这一下不算，也不当成抓桌宠
+    logInput('press-button-early', { clientX: x, clientY: y }, { pet: btn.pet.id, key: btn.key });
+    return true;
+  }
   if (btn) {
     logInput('press-button', { clientX: x, clientY: y }, { pet: btn.pet.id, key: btn.key });
     drag = { button: btn, pet: btn.pet, sx: x, sy: y, ox: 0, oy: 0, moved: false, hist: [], t0: t, at: performance.now() };
@@ -1343,7 +1568,7 @@ let demoTimers = [];
 function runDemo() {
   demoTimers.forEach(clearTimeout);
   const sid = 'demo-' + Date.now();
-  const e = (event, extra = {}) => ({ event, sessionId: sid, project: 'claude-pet', ...extra });
+  const e = (event, extra = {}) => ({ event, sessionId: sid, project: 'code-octopus', ...extra });
   const steps = [
     [0, e('SessionStart', { model: 'claude-opus-5-5' })],
     [1800, e('UserPromptSubmit', { text: tr('demo.prompt') })],
@@ -1361,10 +1586,12 @@ function runDemo() {
     [24600, e('PermissionRequest', { tool: 'Bash', toolKind: 'shell', detail: 'npm test -- --update-snapshots' })],
     [32000, e('PreToolUse', { tool: 'Bash', toolKind: 'shell', detail: 'npm test -- --update-snapshots' })],
     [34400, e('PostToolUse', { tool: 'Bash', toolKind: 'shell', test: 'pass' })],
-    [37000, e('PreToolUse', { tool: 'AskUserQuestion', toolKind: 'other', decision: 'question', text: tr('demo.question') })],
-    [44000, e('PostToolUse', { tool: 'AskUserQuestion', toolKind: 'other' })],
-    [45000, e('Stop', { text: tr('demo.summary') })],
-    [53000, e('SessionEnd', { reason: 'other' })],
+    [37000, e('PostToolUse', { tool: 'Bash', toolKind: 'shell', git: { op: 'commit', text: tr('demo.commit') } })],
+    [39600, e('PostToolUse', { tool: 'Bash', toolKind: 'shell', git: { op: 'push', text: 'main' } })],
+    [42400, e('PreToolUse', { tool: 'AskUserQuestion', toolKind: 'other', decision: 'question', text: tr('demo.question') })],
+    [49400, e('PostToolUse', { tool: 'AskUserQuestion', toolKind: 'other' })],
+    [50400, e('Stop', { text: tr('demo.summary') })],
+    [58400, e('SessionEnd', { reason: 'other' })],
   ];
   demoTimers = steps.map(([ms, ev]) => setTimeout(() => world.onClaudeEvent(ev), ms));
 }
@@ -1418,7 +1645,10 @@ if (host) {
     world.collide = c.collide !== false;
     world.soundOn = c.sound !== false;
     if (!world.collide) for (const p of world.pets) p.inside.clear();
-    if (c.locale) I18N.setLang(c.locale);
+    if (c.locale) {
+      I18N.setLang(c.locale);
+      setFonts(I18N.lang());
+    }
     world.setHomeColor(c.color || 0);
   });
   host.on('pet-command', (data) => {
@@ -1477,9 +1707,45 @@ if (host) {
     world.transfer(pet, to, { drag: d });
   });
   host.on('achievement', ({ ids, items, sessionId }) => world.messenger(sessionId).celebrateUnlock(ids, items));
+  // 花费提醒：今天花的钱超过了设的数
+  host.on('cost-alert', ({ spent, limit, sessionId }) => {
+    const pet = world.messenger(sessionId);
+    pet.touch();
+    pet.doEmote('oops', 1.6);
+    const usd = (v) => `$${v.toFixed(v < 10 ? 2 : 1)}`;
+    pet.say(tr('say.costAlert', { spent: usd(spent) }), 6, true, { sub: tr('say.costAlertSub', { limit: usd(limit) }) });
+  });
+  // 插件里的 /octopus-party：撒彩纸
+  host.on('party', () => {
+    const pet = world.messenger();
+    pet.touch();
+    pet.doEmote(Math.random() < 0.5 ? 'cheer' : 'pump', 2);
+    world.confetti(pet);
+    pet.say(tr('say.party'), 2.4);
+  });
+  // 休息提醒：端一杯水过来
+  host.on('break-reminder', ({ minutes }) => world.messenger().offerWater(minutes));
+  // 养成等级升级：撒彩纸，说升到几级、现在是什么称号
+  host.on('level-up', ({ level, title, sessionId }) => {
+    const pet = world.messenger(sessionId);
+    pet.touch();
+    pet.doEmote('cheer', 2.2);
+    world.confetti(pet);
+    pet.say(tr('say.levelUp', { n: level, title: tr(`level.${title}`) }), 3.5, true);
+  });
   host.on('hungry', ({ count }) => {
     const pet = world.pets.find((p) => !p.activity && !p.leaving && !p.leaveAt && !p.visitor && !p.game);
     if (pet) pet.hungry(count);
+  });
+  // 在游戏厅里破了纪录：来一只替你庆祝
+  host.on('arcade-record', ({ game, score }) => {
+    const pet = world.messenger();
+    pet.touch();
+    pet.doEmote('cheer', 2);
+    world.confetti(pet);
+    world.sparkles(pet);
+    world.sound('unlock');
+    pet.say(tr('arc.recordSay', { game: tr(`${game}.name`), n: score }), 4.5, false, { sub: tr('arc.recordSub') });
   });
   host.on('update-ready', ({ version }) => world.messenger().say(tr('say.updateReady', { version }), 6, false, { sub: tr('say.updateSub') }));
   host.on('tour', ({ connected }) => {
@@ -1527,6 +1793,7 @@ if (host) {
 } else {
   document.body.classList.add('preview');
   I18N.setLang(I18N.detect(navigator.languages));
+  setFonts(I18N.lang());
   world.setPlatforms(previewPlatforms(), previewWindows);
   if (location.search.includes('demo')) setTimeout(runDemo, 800);
 }

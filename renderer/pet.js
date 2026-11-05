@@ -270,7 +270,8 @@ class Pet {
 
   // 在桌宠身上批准：牌子照举，气泡里给出完整命令和「允许 / 拒绝 / 去终端」
   askPermission({ id, tool, detail }) {
-    this.ask = { id, tool, detail };
+    // clipped：主进程那边已经截掉了一段（末尾是省略号），这时不给「允许」
+    this.ask = { id, tool, detail, clipped: /…$/.test(detail || '') };
     this.cardUntil = 0;
     const a = this.activity;
     if (!a || a.kind !== 'alert') this.alert('!', tr('say.approve'), true, tool);
@@ -372,7 +373,7 @@ class Pet {
     if (!r || r.off) return;
     const reasons = [...new Set((r.skipped || []).map((x) => x.reason))];
     if (r.eaten) {
-      const names = r.names.slice(0, 3).join('、') + (r.names.length > 3 ? ' …' : '');
+      const names = r.names.slice(0, 3).join(tr('punct.listSep')) + (r.names.length > 3 ? ' …' : '');
       this.doEmote('eat', 1.4);
       this.say(tr('say.ate', { n: r.eaten }), 3, false, { sub: names });
       setTimeout(() => {
@@ -504,6 +505,14 @@ class Pet {
         } else if (ev.test === 'fail') {
           this.doEmote(Math.random() < 0.4 ? 'headshake' : 'sad', 2.4);
           this.say(tr('say.testFail'), 2.4);
+        } else if (ev.git && ev.git.op === 'commit') {
+          this.doEmote('pump', 1.3);
+          this.say(tr('say.commit'), 2.4, false, { sub: ev.git.text, quote: true });
+          this.world.stamp(this);
+        } else if (ev.git && ev.git.op === 'push') {
+          this.doEmote('wave', 1.6);
+          this.say(tr('say.push'), 2.4, false, { sub: ev.git.text ? `→ ${ev.git.text}` : '' });
+          this.world.rocket(this);
         } else if (ev.error) {
           this.doEmote('oops', 1.2);
           this.say(tr('say.error'), 1.8);
@@ -930,6 +939,12 @@ class Pet {
 
   behave(dt) {
     const w = this.world;
+    if (this.haulIcon && this.mode !== 'haul' && this.mode !== 'haulStart') w.releaseIcon(this);
+    // 探头探到一半被打断（被叫去干活、问候之类）：马上回到屏幕里面，别卡在外面
+    if (this.peekSide && this.mode !== 'peek' && this.mode !== 'peekWalk') {
+      this.peekSide = null;
+      this.x = clamp(this.x, this.halfW, w.width - this.halfW);
+    }
     if (this.leaving) {
       this.mode = 'run';
       this.step(this.exitDir, RUN_SPEED * 0.6, dt, 'fall');
@@ -998,6 +1013,92 @@ class Pet {
         break;
       case 'sleep':
         break;
+      case 'haulStart':
+        if (this.modeT <= 0) this.setMode('haul', rand(3, 6));
+        break;
+      case 'haul': {
+        // 拖着走得慢；撞墙、走到边、时间到了就松手
+        const r = this.step(this.facing, WALK_SPEED * 0.55, dt, 'turn');
+        if (this.mode !== 'haul') break;
+        if (r !== 'ok' || this.modeT <= 0) {
+          w.releaseIcon(this);
+          this.doEmote('love', 0.8);
+          this.setMode('idle', rand(1, 2));
+        }
+        break;
+      }
+      case 'fishWalk': {
+        const r = this.step(this.facing, WALK_SPEED, dt, 'turn', this.fishTarget);
+        if (this.mode !== 'fishWalk') break;
+        if (Math.abs(this.x - this.fishTarget) < 0.5) {
+          this.setMode('fish', rand(10, 16));
+          this.fishT = 0;
+          this.biteAt = rand(2.5, 4.5);
+          this.bite = 0;
+          this.caughtAt = -9;
+        } else if (r !== 'ok' || this.modeT <= 0) this.setMode('idle', rand(1, 2));
+        break;
+      }
+      case 'fish':
+        // 隔一会儿有鱼咬钩：浮漂往下沉，过一下提竿
+        this.fishT += dt;
+        if (!this.bite && this.fishT >= this.biteAt) this.bite = 0.9;
+        else if (this.bite) {
+          this.bite -= dt;
+          if (this.bite <= 0) {
+            this.bite = 0;
+            this.caughtAt = this.fishT;
+            this.biteAt = this.fishT + rand(3, 5);
+            w.catchSomething(this);
+          }
+        }
+        if (this.modeT <= 0) this.pickNext();
+        break;
+      case 'peekWalk': {
+        const r = this.step(this.facing, WALK_SPEED, dt, 'turn');
+        if (this.mode !== 'peekWalk') break;
+        if (r === 'blocked') {
+          this.setMode('peek', 8);
+          this.peekT = 0;
+        } else if (r !== 'ok' || this.modeT <= 0) this.setMode('idle', rand(1, 2));
+        break;
+      }
+      case 'peek': {
+        // 缩出去 → 藏一会儿 → 探出半个脑袋 → 缩回去 → 走回来
+        const t = (this.peekT += dt);
+        const hw = this.halfW;
+        const out = -hw - 2;
+        const peek = -hw * 0.15;
+        const ease = (k) => k * k * (3 - 2 * k);
+        let d;
+        if (t < 0.6) d = hw + (out - hw) * ease(t / 0.6);
+        else if (t < 1.8) d = out;
+        else if (t < 2.3) d = out + (peek - out) * ease((t - 1.8) / 0.5);
+        else if (t < 5.5) d = peek;
+        else if (t < 5.8) d = peek + (out - peek) * ease((t - 5.5) / 0.3);
+        else if (t < 6.6) d = out;
+        else if (t < 7.4) d = out + (hw - out) * ease((t - 6.6) / 0.8);
+        else {
+          this.x = this.peekX(hw);
+          this.setMode('idle', rand(1, 2));
+          break;
+        }
+        const nx = this.peekX(d);
+        this.walkDist += Math.abs(nx - this.x);
+        this.x = nx;
+        const inward = this.peekSide === 'left' ? 1 : -1;
+        this.facing = t < 0.6 ? -inward : inward;
+        break;
+      }
+      case 'bubbles':
+        // 吹泡泡：隔一会儿吹出一个
+        this.bubbleT -= dt;
+        if (this.bubbleT <= 0) {
+          this.bubbleT = rand(0.45, 0.9);
+          w.soapBubble(this);
+        }
+        if (this.modeT <= 0) this.pickNext();
+        break;
       default:
         if (this.modeT <= 0) this.pickNext();
     }
@@ -1020,33 +1121,97 @@ class Pet {
       return;
     }
     const r = Math.random();
-    if (r < 0.3) {
+    if (r < 0.26) {
       this.setMode('idle', rand(1.5, 4.5));
-    } else if (r < 0.62) {
+    } else if (r < 0.52) {
       this.setMode('walk', rand(2, 6));
       if (this.x < w.width * 0.12) this.facing = 1;
       else if (this.x > w.width * 0.88) this.facing = -1;
       else this.facing = Math.random() < 0.5 ? -1 : 1;
       this.edgePolicy = Math.random() < 0.35 ? 'fall' : 'turn';
-    } else if (r < 0.74) {
+    } else if (r < 0.62) {
       this.jumpTarget = w.findJumpTarget(this);
       if (this.jumpTarget) this.setMode('crouch', 0.22);
       else this.setMode('idle', rand(1, 3));
-    } else if (r < 0.8) {
+    } else if (r < 0.67) {
       this.setMode('sit', rand(4, 9));
-    } else if (r < 0.84) {
+    } else if (r < 0.7) {
       this.setMode('stretch', 1.4);
-    } else if (r < 0.88) {
+    } else if (r < 0.73) {
       this.setMode('look', 2.2);
-    } else if (r < 0.92) {
+    } else if (r < 0.77) {
       this.setMode('read', rand(6, 12));
-    } else if (r < 0.95) {
+    } else if (r < 0.8) {
       this.setMode('coffee', rand(4, 7));
-    } else if (r < 0.98) {
+    } else if (r < 0.83) {
       this.setMode('game', rand(5, 9));
+    } else if (r < 0.86) {
+      this.setMode('duck', rand(7, 12));
+    } else if (r < 0.89) {
+      this.setMode('bubbles', rand(4, 7));
+      this.bubbleT = 0.4;
+    } else if (r < 0.93) {
+      this.startHaul();
+    } else if (r < 0.96) {
+      if (!this.startFishing()) this.setMode('idle', rand(1, 3));
+    } else if (r < 0.975) {
+      this.setMode('workout', rand(4, 7));
+    } else if (r < 0.99) {
+      if (!this.startPeek()) this.setMode('idle', rand(1, 3));
     } else {
       this.setMode('dance', rand(2.5, 4));
     }
+  }
+
+  // 休息提醒：端着一杯水，提醒你起来活动、喝口水
+  offerWater(minutes) {
+    this.touch();
+    this.setMode('water', 10);
+    this.say(tr('say.break', { m: minutes }), 10, true, { sub: tr('say.breakSub') });
+  }
+
+  // 拖图标：身后冒出一个假的桌面图标（只是画出来的，不是你的文件），朝平台长的那边拖过去
+  startHaul() {
+    const w = this.world;
+    const seg = this.ground && this.ground.id !== 'floor' ? w.segmentAt(this.ground.id, this.x, this.edgeTolerance()) : null;
+    const l = seg ? seg.x1 : 0;
+    const r = seg ? seg.x2 : w.width;
+    this.facing = r - this.x > this.x - l ? 1 : -1;
+    w.spawnIcon(this);
+    this.setMode('haulStart', 0.8);
+  }
+
+  // 钓鱼：走到窗口边上坐下甩竿。站在屏幕底下（没有边可以钓）或者离边太远就不钓
+  startFishing() {
+    const w = this.world;
+    if (!this.ground || this.ground.id === 'floor') return false;
+    const seg = w.segmentAt(this.ground.id, this.x, this.edgeTolerance());
+    if (!seg || seg.x2 - seg.x1 < this.halfW * 3) return false;
+    const toLeft = this.x - seg.x1 < seg.x2 - this.x;
+    const target = toLeft ? seg.x1 + 6 * this.Pd : seg.x2 - 6 * this.Pd;
+    if (Math.abs(target - this.x) > 420 || target < this.halfW || target > w.width - this.halfW) return false;
+    this.fishTarget = target;
+    this.facing = toLeft ? -1 : 1;
+    this.setMode('fishWalk', 12);
+    return true;
+  }
+
+  // 探头：站在屏幕最底下、那边没有别的屏时，走到屏幕边缩出去，再探出半个脑袋看看你
+  startPeek() {
+    const w = this.world;
+    if (!this.ground || this.ground.id !== 'floor') return false;
+    const side = this.x < w.width / 2 ? 'left' : 'right';
+    if (w.exitAt(side, this)) return false;
+    if ((side === 'left' ? this.x : w.width - this.x) > 600) return false;
+    this.peekSide = side;
+    this.facing = side === 'left' ? -1 : 1;
+    this.setMode('peekWalk', 16);
+    return true;
+  }
+
+  // 探头时离屏幕边多远（身体中心；负数是在屏幕外面）
+  peekX(d) {
+    return this.peekSide === 'left' ? d : this.world.width - d;
   }
 
   // 先竖直跳到比目标高一点的地方，再横着落上去（这样不会穿过窗口侧面）
@@ -1234,9 +1399,34 @@ class Pet {
           break;
         }
       }
-    } else if (this.mode === 'walk' || this.mode === 'run') {
+    } else if (this.mode === 'walk' || this.mode === 'run' || this.mode === 'haul' || this.mode === 'fishWalk') {
       p.legs = Math.floor(this.walkDist / (this.Pd * 2)) % 2 ? 'walk0' : 'walk1';
       p.dx = 1;
+      // 拖图标：后面那只手往回拽着，使劲
+      if (this.mode === 'haul') Object.assign(p, { armL: 2, eyes: Math.floor(t / 1.5) % 3 === 2 ? 'happy' : 'down', props: Math.floor(t / 2) % 3 === 1 ? ['sweat'] : [] });
+    } else if (this.mode === 'water') {
+      // 把水杯递过来
+      Object.assign(p, { eyes: 'happy', blush: true, armR: 2, top: breathe ? 1 : 0, props: ['glass'] });
+    } else if (this.mode === 'workout') {
+      // 举哑铃：举过头顶、放下，举久了冒汗
+      const up = t % 1.2 < 0.6;
+      Object.assign(p, { top: up ? 0 : 1, eyes: up ? 'down' : 'happy', armL: up ? 'high' : 5, armR: up ? 'high' : 5, props: t % 7 > 4 ? ['dumbbell', 'sweat'] : ['dumbbell'], lift: up });
+    } else if (this.mode === 'peek') {
+      // 探出来的时候瞪大眼睛看着你，过一会儿眯眼笑
+      const t = this.peekT || 0;
+      const moving = t < 0.6 || (t >= 1.8 && t < 2.3) || t >= 6.6;
+      if (moving) p.legs = Math.floor(this.walkDist / (this.Pd * 2)) % 2 ? 'walk0' : 'walk1';
+      else Object.assign(p, { eyes: t < 3.2 ? 'wide' : t < 4.6 ? 'open' : 'happy', dx: 1, blush: t > 4.6, top: 1 });
+    } else if (this.mode === 'peekWalk') {
+      p.legs = Math.floor(this.walkDist / (this.Pd * 2)) % 2 ? 'walk0' : 'walk1';
+      p.dx = 1;
+    } else if (this.mode === 'haulStart') {
+      // 回头看一眼：身后怎么冒出来一个图标
+      Object.assign(p, { eyes: 'wide', dx: -1, armL: 'high' });
+    } else if (this.mode === 'fish') {
+      // 坐在窗口边上钓鱼：咬钩时瞪眼，刚钓上来眯眼笑
+      const justCaught = this.fishT - this.caughtAt < 1;
+      Object.assign(p, { top: 2, sit: true, armR: this.bite ? 2 : 3, eyes: this.bite ? 'wide' : justCaught ? 'happy' : 'down', dx: 1, props: ['rod'], line: 9 + (this.bite ? 2 : Math.sin(t * 2) * 0.6), bite: !!this.bite });
     } else if (this.mode === 'sit') {
       const g = Math.floor(t / 1.7) % 3;
       Object.assign(p, { top: 2, sit: true, armL: 6, armR: 6, dx: g === 1 ? 1 : g === 2 ? -1 : 0 });
@@ -1248,6 +1438,15 @@ class Pet {
       // 端着咖啡，时不时喝一口
       const sip = t % 2.2 < 0.6;
       Object.assign(p, { eyes: sip ? 'happy' : 'open', armR: sip ? 2 : 4, blush: sip, top: breathe ? 1 : 0, props: [sip ? 'mugUp' : 'mug'] });
+    } else if (this.mode === 'duck') {
+      // 小黄鸭调试：坐着对鸭子比划着讲代码，讲一会儿停下来想一想
+      const k = t % 4;
+      if (k < 2.6) Object.assign(p, { top: 2, sit: true, dx: 1, armL: 5, armR: Math.floor(t * 3) % 2 ? 'high' : 4, props: ['duck'] });
+      else Object.assign(p, { top: 2, sit: true, eyes: 'down', armL: 5, armR: 5, props: ['duck', 'dots'] });
+    } else if (this.mode === 'bubbles') {
+      // 吹泡泡：举着小棒，吹的时候鼓起嘴
+      const blow = (this.bubbleT || 0) > 0.3;
+      Object.assign(p, { top: breathe ? 1 : 0, eyes: blow ? 'happy' : 'open', armR: 2, mouth: blow ? '' : 'open', props: ['wand'] });
     } else if (this.mode === 'game') {
       // 打掌机，按键按得飞快
       const tap = Math.floor(t * 6) % 2;
@@ -1361,6 +1560,7 @@ class Pet {
         alpha: Math.min(fadeIn, fadeOut),
         subLines: this.ask ? 5 : 3,
         buttons: this.ask && b.important ? [['allow', tr('ask.allow')], ['deny', tr('ask.deny')], ['terminal', tr('ask.terminal')]] : null,
+        askClipped: !!(this.ask && this.ask.clipped),
       };
     }
     const a = this.activity;

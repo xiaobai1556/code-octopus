@@ -6,7 +6,7 @@ const TOUR_STEP_S = 7;
 class Tour {
   constructor(world, connected) {
     this.world = world;
-    this.steps = ['hello', 'walk', 'work', 'alert', 'touch', connected ? 'ready' : 'connect'];
+    this.steps = ['hello', 'walk', 'work', 'alert', 'touch', 'play', connected ? 'ready' : 'connect'];
     this.i = -1;
     this.t = 0;
     this.pet = null;
@@ -62,6 +62,10 @@ class Tour {
         w.sparkles(p);
         p.hop(-520);
         break;
+      case 'play':
+        // 拿出掌机：右键菜单里有小游戏
+        p.setMode('game', TOUR_STEP_S + 2);
+        break;
       case 'connect':
         act('alert', { sign: '?', urgent: false });
         break;
@@ -77,6 +81,8 @@ class Tour {
     if (!this.world.pets.includes(this.pet)) return this.end(true); // 被转移到别的屏幕去了
     this.t += dt;
     if (this.step === 'hello' && !this.pet.ground) this.t = 0; // 落地以后才开始计时
+    // 上一步蹦起来了：落地以后再拿出掌机
+    if (this.step === 'play' && this.pet.ground && this.pet.mode !== 'game' && !this.pet.activity) this.pet.setMode('game', TOUR_STEP_S);
     const limit = this.step === 'connect' ? 60 : this.step === 'ready' ? 5 : TOUR_STEP_S;
     if (this.t > limit) this.next();
   }

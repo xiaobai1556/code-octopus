@@ -66,6 +66,7 @@ function write(settings) {
   const tmp = SETTINGS + '.tmp-claude-pet';
   fs.writeFileSync(tmp, JSON.stringify(settings, null, 2) + '\n', 'utf8');
   fs.renameSync(tmp, SETTINGS);
+  cached.key = null; // 自己刚改过，下次一定重新读
 }
 
 // 删掉我们自己的 hook，保留用户原有的；返回是否有改动
@@ -90,24 +91,29 @@ function strip(settings) {
   return changed;
 }
 
-function isInstalled() {
+// 接入状态：设置面板每秒都要问一次，按文件的修改时间和大小缓存，没变就不重新读、不重新解析。
+// needsUpdate：接入过，但还是旧版的配置（权限请求还是"发完就走"的 curl），需要重新接入一次才能在桌宠上批准
+let cached = { key: null, installed: false, needsUpdate: false };
+function status() {
+  let key = 'missing';
+  try {
+    const st = fs.statSync(SETTINGS);
+    key = `${st.mtimeMs}:${st.size}`;
+  } catch {}
+  if (key === cached.key) return cached;
+  let installed = false;
+  let needsUpdate = false;
   try {
     const s = read();
-    return !!s.hooks && JSON.stringify(s.hooks).includes(MARK);
-  } catch {
-    return false;
-  }
+    installed = !!s.hooks && JSON.stringify(s.hooks).includes(MARK);
+    needsUpdate = installed && !JSON.stringify(s.hooks.PermissionRequest || []).includes('/permission?src=' + MARK);
+  } catch {}
+  cached = { key, installed, needsUpdate };
+  return cached;
 }
 
-// 接入过，但还是旧版的配置（权限请求还是"发完就走"的 curl），需要重新接入一次才能在桌宠上批准
-function needsUpdate() {
-  try {
-    const s = read();
-    return isInstalled() && !JSON.stringify((s.hooks && s.hooks.PermissionRequest) || []).includes('/permission?src=' + MARK);
-  } catch {
-    return false;
-  }
-}
+const isInstalled = () => status().installed;
+const needsUpdate = () => status().needsUpdate;
 
 // 在设置对象里加上桌宠的 hooks（先去掉旧的，重复安装不会叠加）
 function withHooks(s, port, src) {
