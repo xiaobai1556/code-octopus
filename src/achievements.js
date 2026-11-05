@@ -21,6 +21,7 @@ const LIST = [
   { id: 'guardian', game: 'defense', item: 'hardhat', goal: 15, value: (s) => arcade(s, 'defense', 'waves') }, // 塔防守住 15 波
   { id: 'typist', game: 'typing', item: 'visor', goal: 40, value: (s) => arcade(s, 'typing', 'wpm') }, // 敲代码 40 WPM
   { id: 'deepstack', game: 'stack', item: 'monocle', goal: 30, value: (s) => arcade(s, 'stack', 'depth') }, // 调用栈叠到 30 层
+  { id: 'firefighter', game: 'whack', item: 'firehelmet', goal: 65, value: (s) => arcade(s, 'whack', 'fixed') }, // 热修复一局修 65 个
 ];
 
 // 游戏厅里最好的一次（stats.data.arcade，见 Stats.recordArcade）

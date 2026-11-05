@@ -16,6 +16,7 @@
     bugclip: { slot: 'head' },
     hardhat: { slot: 'head' },
     visor: { slot: 'head' },
+    firehelmet: { slot: 'head' },
     goggles: { slot: 'face' },
     monocle: { slot: 'face' },
     shield: { slot: 'neck' },
@@ -106,7 +107,7 @@
   }
 
   // 装扮占用头顶多少格（气泡、牌子、点击范围要往上让）
-  const HEADROOM = { bugclip: 3, hardhat: 3, visor: 2, crown: 3, tophat: 5, cap: 2, nightcap: 5, headphones: 2, headband: 0, sprout: 3, chefhat: 5, partyhat: 5, santa: 4, pumpkin: 2, propeller: 4, zongzi: 4, bunnyears: 5, flower: 2, strawhat: 3, mapleleaf: 4, earmuffs: 1 };
+  const HEADROOM = { bugclip: 3, hardhat: 3, visor: 2, firehelmet: 3, crown: 3, tophat: 5, cap: 2, nightcap: 5, headphones: 2, headband: 0, sprout: 3, chefhat: 5, partyhat: 5, santa: 4, pumpkin: 2, propeller: 4, zongzi: 4, bunnyears: 5, flower: 2, strawhat: 3, mapleleaf: 4, earmuffs: 1 };
   const headroom = (outfit) => (outfit && HEADROOM[outfit.head]) || 0;
 
   const api = { SLOTS, ITEMS, SEASON_ITEM, season, calendar, holiday, effective, headroom };

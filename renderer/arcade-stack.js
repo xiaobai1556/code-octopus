@@ -233,7 +233,7 @@
 
     // 左边的小章鱼：眼睛跟着滑的那一帧，对齐了举手，切掉一截瞪眼，掉了晕过去
     drawPet(g, t) {
-      const since = t - this.react.t;
+      const since = this.t - this.react.t; // 用这一局的时间比（t 是游戏厅开着以来的时间）
       const s = this.slider;
       const look = s ? (s.x + s.w / 2 > FIELD.x + FIELD.w / 2 ? 1 : -1) : 0;
       let pose = { eyes: 'open', dx: look, armL: 5, armR: 5, t };

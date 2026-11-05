@@ -158,8 +158,8 @@
       if (this.env.imeWarning && this.env.imeWarning()) g.text(tr('typing.ime'), ED.x + ED.w / 2, ED.y + ED.h - 7, { size: 6, weight: 700, color: '#FF9A8A', align: 'center' });
 
       // 小章鱼抱着笔记本敲：刚敲过键手在动，敲错了冒汗
-      const busy = t - this.typedAt < 0.18;
-      const oops = t - this.errAt < 0.3;
+      const busy = this.t - this.typedAt < 0.18; // 用这一局的时间比（t 是游戏厅开着以来的时间）
+      const oops = this.t - this.errAt < 0.3;
       const typing = Math.floor(t * 14) % 2;
       g.pet(52, 182, 2.6, { eyes: oops ? 'wide' : 'down', armL: busy ? (typing ? 4 : 5) : 5, armR: busy ? (typing ? 5 : 4) : 5, props: oops ? ['laptop', 'sweat'] : ['laptop'], t }, false);
       g.rect(14, 183, 76, 2, '#2E3450');
@@ -190,7 +190,7 @@
       g.text(done, x, y, { ...o, color: '#9BE38B' });
       const dx = g.measure(done, o);
       const cw = g.measure(rest[0] === ' ' ? '_' : rest[0] || '_', o);
-      const err = t - this.errAt < 0.25;
+      const err = this.t - this.errAt < 0.25;
       if (err) g.rect(x + dx - 0.5, y - 6, cw + 1, 12, 'rgba(214,69,69,0.45)');
       g.text(rest, x + dx, y, { ...o, color: C.cream });
       if (Math.floor(t * 2.5) % 2 === 0 || err) g.rect(x + dx, y + 6, cw, 1.4, err ? '#FF7A7A' : C.gold);

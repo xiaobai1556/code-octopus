@@ -127,6 +127,14 @@ function drawHead(px, blob, item, top, grow, t) {
       px(13, r(1), 1, 1, K);
       break;
     }
+    case 'firehelmet':
+      // 热修复的成就：红色消防头盔，前面一块金色徽章，后沿长一点
+      px(5, r(3), 6, 1, '#D63B2F');
+      px(4, r(2), 8, 1, '#D63B2F');
+      px(6, r(3), 2, 1, '#F06A5A'); // 高光
+      px(9, r(3), 2, 2, '#F2C14E'); // 徽章
+      px(1, r(1), 12, 1, '#A8271E'); // 帽沿，后面长
+      break;
     case 'hardhat':
       // 守护主分支的成就：黄色安全帽
       px(5, r(3), 6, 1, '#F2C14E');

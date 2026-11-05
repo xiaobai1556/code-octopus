@@ -14,7 +14,7 @@ const { GAMES } = require('../src/arcade');
 const DT = 1 / 60;
 const RENDERER = path.join(__dirname, '..', 'renderer');
 const GAME_FILES = fs.readdirSync(RENDERER).filter((f) => /^arcade-.+\.js$/.test(f));
-const ACTIONS = ['left', 'right', 'up', 'down', 'space', 'enter', 'yes', 'no', 'retry', 'n1', 'n2', 'n3', 'n4', 'upgrade', 'sell', 'fast'];
+const ACTIONS = ['left', 'right', 'up', 'down', 'space', 'enter', 'yes', 'no', 'retry', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'upgrade', 'sell', 'fast'];
 const TYPABLE = 'abcdefghijklmnopqrstuvwxyz ABCXYZ0123456789-_=+()[]{};:\'",.<>/?!@#$%^&*`~|\\';
 
 const inside = (p, r) => !!p && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
@@ -244,6 +244,8 @@ const PROBES = {
   typing: (game, log) => [game.line, ...game.queue].forEach((l, i) => (log[game.lines + i] = l)),
   // 每一帧叫什么、从哪边滑进来
   stack: (game, log) => game.slider && fresh(log, [game.slider]).forEach((sl) => log.push(`${sl.name}<${sl.from}`)),
+  // 排好的每一个：哪个格子、什么
+  whack: (game, log) => fresh(log, game.planned).forEach((p) => log.push(`${p.cell}:${p.kind}`)),
 };
 
 for (const id of GAMES) {

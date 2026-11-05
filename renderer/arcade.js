@@ -269,6 +269,7 @@ const KEYMAP = {
   ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
   Space: 'space', Enter: 'enter', NumpadEnter: 'enter', Escape: 'esc', KeyP: 'pause', KeyQ: 'quit', KeyY: 'yes', KeyN: 'no', KeyR: 'retry',
   Digit1: 'n1', Digit2: 'n2', Digit3: 'n3', Digit4: 'n4', Numpad1: 'n1', Numpad2: 'n2', Numpad3: 'n3', Numpad4: 'n4',
+  Digit5: 'n5', Digit6: 'n6', Digit7: 'n7', Digit8: 'n8', Digit9: 'n9', Numpad5: 'n5', Numpad6: 'n6', Numpad7: 'n7', Numpad8: 'n8', Numpad9: 'n9',
   KeyU: 'upgrade', KeyX: 'sell', Delete: 'sell', Backspace: 'sell', KeyF: 'fast', KeyT: 'daily',
 };
 
@@ -529,17 +530,20 @@ const compact = () => ARCADE.games.length > 4;
 const GRID_W = 166;
 const GRID_H = 76;
 const GRID_GAP = 8;
-const MINI_W = 110;
 const MINI_H = 80;
-const cols = () => (compact() ? 3 : grid() ? 2 : ARCADE.games.length);
+// 五、六个游戏三列；再多就四列（两行最多八个）
+const cols = () => (ARCADE.games.length > 6 ? 4 : compact() ? 3 : grid() ? 2 : ARCADE.games.length);
+const miniW = () => (cols() === 4 ? 80 : 110);
 const cardRect = (i) => {
   if (compact()) {
-    // 三列，最后一行不满就居中
+    // 最后一行不满就居中
     const n = ARCADE.games.length;
-    const row = Math.floor(i / 3);
-    const inRow = Math.min(3, n - row * 3);
-    const x0 = (W - (MINI_W * inRow + GRID_GAP * (inRow - 1))) / 2;
-    return { x: x0 + (i % 3) * (MINI_W + GRID_GAP), y: 54 + row * (MINI_H + GRID_GAP), w: MINI_W, h: MINI_H };
+    const c = cols();
+    const w = miniW();
+    const row = Math.floor(i / c);
+    const inRow = Math.min(c, n - row * c);
+    const x0 = (W - (w * inRow + GRID_GAP * (inRow - 1))) / 2;
+    return { x: x0 + (i % c) * (w + GRID_GAP), y: 54 + row * (MINI_H + GRID_GAP), w, h: MINI_H };
   }
   if (grid()) {
     const x0 = (W - (GRID_W * 2 + GRID_GAP)) / 2;
@@ -595,7 +599,9 @@ function drawMenu(dt) {
     if (compact()) {
       const ir = { x: r.x + 5, y: y + 5, w: r.w - 10, h: 44 };
       clipIcon(game, ir, 4);
-      g.text(tr(`${game.id}.name`), r.x + r.w / 2, y + 59, { size: 8, weight: 800, align: 'center' });
+      const name = tr(`${game.id}.name`);
+      const nameSize = Math.min(8, (8 * (r.w - 8)) / Math.max(1, g.measure(name, { size: 8, weight: 800 }))); // 卡片窄、名字长就缩小一点
+      g.text(name, r.x + r.w / 2, y + 59, { size: nameSize, weight: 800, align: 'center' });
       g.text(bestText, r.x + r.w / 2, y + r.h - 9, { ...bestStyle, size: 6.5, align: 'center' });
     } else if (grid()) {
       // 横着：左边小画面，右边名字、简介、最高分

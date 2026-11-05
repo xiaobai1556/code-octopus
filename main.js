@@ -1498,7 +1498,7 @@ function openArcade() {
 }
 
 // 每个游戏结束时报上来的指标（成就看它们）：只收这几个
-const ARCADE_METRICS = { bugs: ['level'], hop: ['meters'], approve: ['streak'], defense: ['waves'], typing: ['wpm'], stack: ['depth'] };
+const ARCADE_METRICS = { bugs: ['level'], hop: ['meters'], approve: ['streak'], defense: ['waves'], typing: ['wpm'], stack: ['depth'], whack: ['fixed'] };
 
 function registerArcadeIpc() {
   ipcMain.handle('arcade:info', () => ({
