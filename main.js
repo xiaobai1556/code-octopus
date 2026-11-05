@@ -1354,6 +1354,7 @@ function registerSettingsIpc() {
       achievements: achievements.progress(stats),
       holiday: OUTFITS.holiday(),
       lastBite: bite ? bite.files.length : 0,
+      catches: stats.data.catches || {},
       update: updater.status(),
       hotkeys: hotkeyStatus,
       quietNow: quietNow(),
@@ -1663,6 +1664,12 @@ function registerOverlayIpc() {
   });
   ipcMain.handle('note:info', () => ({ locale: locale() }));
   ipcMain.handle('feed', (e, paths) => eatFiles(e.sender, paths));
+  // 钓鱼图鉴：覆盖层钓上来一样东西，记下来；集齐了解锁成就
+  ipcMain.handle('caught', (e, id) => {
+    const r = stats.recordCatch(id);
+    if (r) unlock(achievements.evaluate(stats), overlayBySender(e.sender));
+    return r;
+  });
   ipcMain.on('renderer-ready', (e) => {
     const o = overlayBySender(e.sender);
     if (!o) return;

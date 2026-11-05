@@ -6,6 +6,7 @@ const KEEP_DAYS = 90;
 const MAX_TURN_MS = 3 * 60 * 60 * 1000; // 一轮最多算 3 小时，防止忘了关的会话把时长撑爆
 const MAX_KEYS = 300;
 const MAX_COMMIT_LOG = 8; // 日报里列出当天最后几次提交
+const { byId: CATCH_BY_ID } = require('./catches');
 
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -227,6 +228,16 @@ class Stats {
     const best = (all[game] ||= {});
     for (const [k, v] of Object.entries(metrics || {})) if (typeof v === 'number' && v > (best[k] || 0)) best[k] = v;
     this.scheduleSave();
+  }
+
+  // 钓鱼图鉴：钓上来一样东西。返回 { isNew, count, kinds }；不认识的返回 null
+  recordCatch(id) {
+    if (!CATCH_BY_ID[id]) return null;
+    const all = (this.data.catches ||= {});
+    const isNew = !all[id];
+    all[id] = (all[id] || 0) + 1;
+    this.scheduleSave();
+    return { isNew, count: all[id], kinds: Object.keys(all).length };
   }
 
   // 喂它吃了几个文件

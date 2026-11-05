@@ -293,6 +293,33 @@ function renderWardrobe() {
   $('holiday-hint').textContent = holiday ? tr('set.holidayNow', { name: tr(`holiday.${holiday.id}`) }) : tr('set.holidaysHint');
 }
 
+// 钓鱼图鉴：钓到过的画出来、写名字和次数；没钓到的只有灰色剪影和问号
+function renderFishdex() {
+  const caught = state.catches || {};
+  const list = CATCHES.CATCHES;
+  $('fishdex-count').textContent = tr('set.fishdexCount', { n: list.filter((c) => caught[c.id]).length, total: list.length });
+  $('fishdex-list').replaceChildren(
+    ...list.map((c) => {
+      const n = caught[c.id] || 0;
+      const li = document.createElement('li');
+      li.className = n ? '' : 'locked';
+      const cv = document.createElement('canvas');
+      const dpr = window.devicePixelRatio || 1;
+      cv.width = 32 * dpr;
+      cv.height = 24 * dpr;
+      drawGlyph(cv.getContext('2d'), c.glyph, 16 * dpr, 12 * dpr, Math.round(3 * dpr), n ? c.color : '#B8B2A8', n ? '#FFFFFF' : null);
+      const name = document.createElement('div');
+      name.textContent = n ? tr(`catch.${c.id}`) : '？？？';
+      const times = document.createElement('div');
+      const rare = CATCHES.rarity(c.id);
+      times.className = `times${rare !== 'common' ? ' rare' : ''}`;
+      times.textContent = n ? tr('set.fishdexTimes', { n }) : tr(`set.rarity.${rare}`);
+      li.append(cv, name, times);
+      return li;
+    })
+  );
+}
+
 function renderAchievements() {
   const list = state.achievements;
   const palette = PALETTES[state.config.color || 0];
@@ -503,6 +530,7 @@ function render() {
   if (changed('appearance', [state.config, state.systemLocale])) renderAppearance();
   if (changed('wardrobe', [state.config.outfit, state.config.holidays, state.config.color, state.holiday, state.achievements])) renderWardrobe();
   if (changed('achievements', [state.achievements, state.config.color])) renderAchievements();
+  if (changed('fishdex', [state.catches])) renderFishdex();
   if (changed('feed', [state.config.feed, state.config.feedHint, state.config.feedDir, state.lastBite])) renderFeed();
   if (changed('play', [state.config.dance, state.config.timeOfDay, state.config.pomodoroMin, state.config.hotkeys, state.hotkeys, state.config.quietHours, state.config.quietFrom, state.config.quietTo, state.quietNow])) renderPlay();
   if (changed('updates', [state.update, state.config.autoUpdate])) renderUpdates();

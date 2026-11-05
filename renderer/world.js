@@ -664,16 +664,24 @@ const world = {
   },
   // 钓上来一样东西：从浮漂那儿划一道弧飞到小章鱼手里
   catchSomething(pet) {
-    const what = pick(['fish', 'fish', 'bug', 'boot']);
-    const color = { fish: '#F2A65A', bug: '#7DB85C', boot: '#8B6A4E' }[what];
+    const c = CATCHES.pick();
     const x0 = pet.x + pet.facing * 11 * pet.Pd;
     const y0 = pet.y + 9 * pet.Pd;
     const x1 = pet.x + pet.facing * pet.halfW * 0.5;
     const y1 = pet.y - pet.height;
     const T = 0.8;
     const g = 700;
-    this.particles.push({ kind: what, x: x0, y: y0, vx: (x1 - x0) / T, vy: (y1 - y0) / T - 0.5 * g * T, g, life: T + 0.25, max: T + 0.25, size: pet.Pd * 0.8, color });
-    if (Math.random() < 0.5) pet.say(tr(`fish.${what}`), 1.8);
+    this.particles.push({ kind: c.glyph, x: x0, y: y0, vx: (x1 - x0) / T, vy: (y1 - y0) / T - 0.5 * g * T, g, life: T + 0.25, max: T + 0.25, size: pet.Pd * 0.8, color: c.color });
+    const name = tr(`catch.${c.id}`);
+    const rare = CATCHES.rarity(c.id) !== 'common';
+    if (rare) setTimeout(() => this.sparkles(pet), T * 1000);
+    // 记进图鉴；第一次钓到的说一声"新收录"
+    const said = (r) => {
+      if (r && r.isNew) pet.say(tr('catch.new', { name }), 2.6, false, { sub: tr('catch.progress', { n: r.kinds, total: CATCHES.CATCHES.length }) });
+      else if (rare || Math.random() < 0.4) pet.say(tr('catch.got', { name }), 1.8);
+    };
+    if (host && host.caught) host.caught(c.id).then(said, () => said(null));
+    else said(null);
   },
   // 吹泡泡：从小棒那儿飘出去，慢慢往上飘、左右晃
   soapBubble(pet) {

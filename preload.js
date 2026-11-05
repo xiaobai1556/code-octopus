@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('petHost', {
   tourDone: () => ipcRenderer.send('tour-done'),
   permissionDecision: (msg) => ipcRenderer.send('permission-decision', msg),
   noteDone: (id) => ipcRenderer.send('note-done', id),
+  caught: (id) => ipcRenderer.invoke('caught', id),
   // 拖到桌宠身上的文件：拿到真实路径交给主进程去"吃"
   feed: (files) => ipcRenderer.invoke('feed', Array.from(files || [], (f) => webUtils.getPathForFile(f)).filter(Boolean)),
   ready: () => ipcRenderer.send('renderer-ready'),

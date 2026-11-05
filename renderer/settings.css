@@ -583,6 +583,41 @@ footer {
   background: var(--accent);
 }
 
+/* ---------- 钓鱼图鉴 ---------- */
+.fishdex {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+}
+.fishdex li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px 6px;
+  border-radius: 8px;
+  background: var(--hover);
+  font-size: 12px;
+  text-align: center;
+}
+.fishdex li.locked {
+  color: var(--muted);
+}
+.fishdex canvas {
+  width: 32px;
+  height: 24px;
+}
+.fishdex .times {
+  font-size: 11px;
+  color: var(--muted);
+}
+.fishdex .rare {
+  color: #b9861f;
+}
+
 /* ---------- 喂文件 ---------- */
 .path {
   overflow: hidden;
