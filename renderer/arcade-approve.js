@@ -18,7 +18,7 @@
   class Approve {
     constructor(env) {
       this.env = env;
-      this.draw_ = ARCADE_CARDS.deck();
+      this.draw_ = ARCADE_CARDS.deck(env.rng); // 今日挑战时按日期播种：题目顺序大家一样
       this.score = 0;
       this.lives = LIVES;
       this.streak = 0;

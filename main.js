@@ -1507,10 +1507,11 @@ function registerArcadeIpc() {
     outfit: OUTFITS.effective(config.outfit, config.holidays),
     sound: config.sound !== false,
     scores: arcade.summary(),
+    daily: { day: dayKey(), scores: arcade.dailyOf(dayKey()) },
     achievements: achievements.progress(stats).filter((a) => a.game),
   }));
-  ipcMain.handle('arcade:score', (_e, game, score, metrics) => {
-    const r = arcade.record(game, score);
+  ipcMain.handle('arcade:score', (_e, game, score, metrics, day) => {
+    const r = arcade.record(game, score, day);
     if (!r) return null;
     const clean = {};
     for (const key of ARCADE_METRICS[game] || []) {

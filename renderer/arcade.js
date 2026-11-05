@@ -269,7 +269,7 @@ const KEYMAP = {
   ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
   Space: 'space', Enter: 'enter', NumpadEnter: 'enter', Escape: 'esc', KeyP: 'pause', KeyQ: 'quit', KeyY: 'yes', KeyN: 'no', KeyR: 'retry',
   Digit1: 'n1', Digit2: 'n2', Digit3: 'n3', Digit4: 'n4', Numpad1: 'n1', Numpad2: 'n2', Numpad3: 'n3', Numpad4: 'n4',
-  KeyU: 'upgrade', KeyX: 'sell', Delete: 'sell', Backspace: 'sell', KeyF: 'fast',
+  KeyU: 'upgrade', KeyX: 'sell', Delete: 'sell', Backspace: 'sell', KeyF: 'fast', KeyT: 'daily',
 };
 
 const input = {
@@ -409,6 +409,18 @@ try {
 } catch {}
 
 const bestOf = (id) => (scores[id] && scores[id].best) || 0;
+// 今日挑战：同一天、同一个游戏，种子一样，大家玩的是同一局。daily = { day, scores: { bugs: 今天最好, ... } }
+let daily = { day: '', scores: {} };
+let runDay = null; // 这一局是哪天的今日挑战（平常的一局是 null）
+const dailyBestOf = (id) => (daily.day === ARCADE_RNG.dayKey() && daily.scores[id]) || 0;
+const shortDay = (key) => key.slice(5).replace('-', '/').replace(/^0/, '').replace('/0', '/');
+
+// 给一局游戏的环境：音效、最高分、随机数。有种子（今日挑战）就用按种子播种的随机数，否则就是 Math.random。
+// 游戏里决定玩法的随机（掉什么、窗口怎么摆、出什么题、每波来什么）都用它，特效用 Math.random
+ARCADE.env = ({ seed = '', sound: snd = () => {}, best = 0 } = {}) => {
+  const rng = seed ? ARCADE_RNG.seeded(seed) : Math.random;
+  return { sound: snd, best, rng, rand: (a, b) => a + rng() * (b - a), pick: (list) => list[Math.floor(rng() * list.length)], daily: !!seed };
+};
 const achOf = (id) => achievements.find((a) => a.game === id) || null;
 
 function openIntro(i) {
@@ -420,8 +432,9 @@ function openIntro(i) {
   state = 'intro';
 }
 
-function startRun() {
-  run = def.create({ sound, best: bestOf(def.id) });
+function startRun(isDaily = false) {
+  runDay = isDaily ? ARCADE_RNG.dayKey() : null;
+  run = def.create(ARCADE.env({ seed: runDay ? `${runDay}:${def.id}` : '', sound, best: bestOf(def.id) }));
   countT = 0;
   state = 'count';
   sound('count');
@@ -431,14 +444,29 @@ async function finishRun() {
   state = 'over';
   overT = 0;
   const prev = bestOf(def.id);
+  const dailyPrev = runDay ? dailyBestOf(def.id) : 0;
   const score = Math.max(0, Math.floor(run.score || 0));
-  result = { score, best: Math.max(prev, score), record: score > prev && score > 0, summary: run.summary ? run.summary() : [], unlocked: [] };
-  sound(result.record ? 'record' : 'over');
+  result = {
+    score,
+    best: Math.max(prev, score),
+    record: score > prev && score > 0,
+    day: runDay,
+    dailyBest: runDay ? Math.max(dailyPrev, score) : 0,
+    dailyRecord: !!runDay && score > dailyPrev && score > 0,
+    summary: run.summary ? run.summary() : [],
+    unlocked: [],
+  };
+  sound(result.record || result.dailyRecord ? 'record' : 'over');
   try {
-    const r = await api.saveScore(def.id, score, run.metrics ? run.metrics() : {});
+    const r = await api.saveScore(def.id, score, run.metrics ? run.metrics() : {}, runDay);
     if (r) {
       scores[def.id] = { ...(scores[def.id] || {}), best: r.best, plays: r.plays };
       result.best = r.best;
+      if (runDay && r.dailyBest != null) {
+        if (daily.day !== runDay) daily = { day: runDay, scores: {} };
+        daily.scores[def.id] = r.dailyBest;
+        result.dailyBest = r.dailyBest;
+      }
       if (r.achievements) achievements = r.achievements;
       // 刚解锁的成就：结算里亮出来
       result.unlocked = r.unlocked || [];
@@ -589,7 +617,7 @@ function drawIntro(dt) {
     const keys = g.wrap(keysText, p.w - 28, { size: size - 0.5 }, 3);
     const height = rules.reduce((h, lines) => h + lines.length * lh + 4, 0) + keys.length * (lh - 1) + 2;
     layout = { size, lh, rules, keys };
-    if (top + height <= by - 4) break;
+    if (top + height <= by - 14) break;
   }
   let y = top;
   for (const lines of layout.rules) {
@@ -599,8 +627,12 @@ function drawIntro(dt) {
   }
   layout.keys.forEach((line, k) => g.text(line, p.x + 14, y + 2 + k * (layout.lh - 1), { size: layout.size - 0.5, color: C.muted }));
 
-  if (g.button({ x: p.x + p.w / 2 + 6, y: by, w: 92, h: 20 }, tr('arc.start'), { primary: true })) return startRun();
-  if (g.button({ x: p.x + p.w / 2 - 98, y: by, w: 92, h: 20 }, tr('arc.back'))) return toMenu();
+  const dBest = dailyBestOf(def.id);
+  g.text(tr(dBest ? 'arc.dailyInfoBest' : 'arc.dailyInfo', { date: shortDay(ARCADE_RNG.dayKey()), n: dBest }), W / 2, by - 7, { size: 6, color: '#B9861F', align: 'center' });
+  if (input.hit('daily')) return startRun(true);
+  if (g.button({ x: W / 2 + 50, y: by, w: 84, h: 20 }, tr('arc.start'), { primary: true })) return startRun(false);
+  if (g.button({ x: W / 2 - 42, y: by, w: 84, h: 20 }, tr('arc.daily'), { fill: C.gold, ink: '#3A2600' })) return startRun(true);
+  if (g.button({ x: W / 2 - 134, y: by, w: 84, h: 20 }, tr('arc.back'))) return toMenu();
   g.text(tr('arc.introHint'), W / 2, p.y + p.h - 9, { size: 6, color: C.muted, align: 'center' });
 }
 
@@ -612,6 +644,13 @@ function drawHud() {
   const sw = g.measure(String(h.score), { size: 10, weight: 800 });
   g.text(tr('arc.best', { n: Math.max(bestOf(def.id), h.score) }), 14 + sw, 9.5, { size: 6.5, color: C.dim });
   if (h.label) g.text(h.label, W / 2, 9, { size: 7.5, weight: 700, color: h.labelColor || C.cream, align: 'center' });
+  if (runDay) {
+    const tag = tr('arc.dailyTag');
+    const tw = g.measure(tag, { size: 6, weight: 800 }) + 8;
+    const lx = W / 2 - (h.label ? g.measure(h.label, { size: 7.5, weight: 700 }) / 2 : 0) - tw - 5;
+    g.round(lx, 4, tw, 10, 5, C.gold, null);
+    g.text(tag, lx + tw / 2, 9.3, { size: 6, weight: 800, color: '#3A2600', align: 'center' });
+  }
   // 血量多（比如塔防的 20 点）：一颗心加数字
   if (h.hp != null) {
     const low = h.hp <= Math.max(3, (h.hpMax || 20) * 0.25);
@@ -656,18 +695,20 @@ function drawOver(dt) {
   const ph = 140 + lines.length * 10.5;
   const p = { x: W / 2 - 120, y: Math.max(8, H / 2 - ph / 2), w: 240, h: ph };
   const rise = Math.max(0, 1 - overT * 4) * 20;
-  g.round(p.x, p.y + rise, p.w, p.h, 9, C.card, result.record ? C.gold : null, 2);
+  const badge = result.record ? tr('arc.record') : result.dailyRecord ? tr('arc.dailyRecord') : '';
+  g.round(p.x, p.y + rise, p.w, p.h, 9, C.card, badge ? C.gold : null, 2);
   const y0 = p.y + rise;
-  g.text(tr('arc.over'), W / 2, y0 + 16, { size: 9, weight: 700, color: C.muted, align: 'center' });
+  g.text(result.day ? tr('arc.dailyOver', { date: shortDay(result.day) }) : tr('arc.over'), W / 2, y0 + 16, { size: 9, weight: 700, color: result.day ? '#B9861F' : C.muted, align: 'center' });
   // 分数从 0 数上去
   const shown = Math.round(result.score * Math.min(1, overT / 0.7));
-  g.text(String(shown), W / 2, y0 + 42, { size: 26, weight: 800, color: result.record ? C.accent : C.ink, align: 'center' });
-  if (result.record) {
+  g.text(String(shown), W / 2, y0 + 42, { size: 26, weight: 800, color: badge ? C.accent : C.ink, align: 'center' });
+  if (badge) {
     const bounce = Math.abs(Math.sin(t * 5)) * 2;
-    g.round(W / 2 - 34, y0 + 60 - bounce, 68, 13, 6.5, C.gold, null);
-    g.text(tr('arc.record'), W / 2, y0 + 66.5 - bounce, { size: 7.5, weight: 800, color: '#5A3B00', align: 'center' });
+    const bw = Math.max(68, g.measure(badge, { size: 7.5, weight: 800 }) + 16);
+    g.round(W / 2 - bw / 2, y0 + 60 - bounce, bw, 13, 6.5, C.gold, null);
+    g.text(badge, W / 2, y0 + 66.5 - bounce, { size: 7.5, weight: 800, color: '#5A3B00', align: 'center' });
     if (Math.random() < dt * 30) sparkle.push({ x: rand(p.x, p.x + p.w), y: y0 + rand(0, 20), vy: rand(-30, -10), life: 0.8, c: pick([C.gold, C.accent, '#70C1B3', '#B388EB']) });
-  } else g.text(tr('arc.best', { n: result.best }), W / 2, y0 + 66, { size: 7.5, color: C.muted, align: 'center' });
+  } else g.text(result.day ? tr('arc.dailyBestLine', { d: result.dailyBest, b: result.best }) : tr('arc.best', { n: result.best }), W / 2, y0 + 66, { size: 7.5, color: C.muted, align: 'center' });
   let y = y0 + 84;
   for (const l of lines) {
     g.text(l.text, p.x + 16 + (l.indent || 0), y, { size: l.size || 7.2, color: l.color || C.ink, mono: !!l.mono, weight: l.bold ? 700 : 400 });
@@ -678,7 +719,7 @@ function drawOver(dt) {
   const ready = overT > 0.4;
   const again = g.button({ x: W / 2 + 4, y: by, w: 92, h: 20 }, tr('arc.again'), { primary: true });
   const menu = g.button({ x: W / 2 - 96, y: by, w: 92, h: 20 }, tr('arc.menu'));
-  if (ready && (again || input.hit('enter', 'space', 'retry'))) return startRun();
+  if (ready && (again || input.hit('enter', 'space', 'retry'))) return startRun(!!result.day); // 今日挑战就再来一局今日挑战
   if (ready && (menu || input.hit('esc', 'quit'))) return toMenu();
   g.text(tr('arc.overHint'), W / 2, y0 + p.h - 9, { size: 6, color: C.muted, align: 'center' });
 }
@@ -760,6 +801,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   soundOn = info.sound !== false;
   scores = info.scores || {};
   achievements = info.achievements || [];
+  daily = info.daily || daily;
   sel = clamp(sel, 0, ARCADE.games.length - 1);
   state = 'menu';
   canvas.focus();
@@ -776,16 +818,27 @@ function mockApi() {
     }
   };
   return {
-    info: async () => ({ locale: I18N.detect(navigator.languages), color: 0, outfit: OUTFITS.effective({}, true), sound: true, scores: load() }),
-    saveScore: async (game, score) => {
+    info: async () => {
+      const all = load();
+      const day = ARCADE_RNG.dayKey();
+      return { locale: I18N.detect(navigator.languages), color: 0, outfit: OUTFITS.effective({}, true), sound: true, scores: all, daily: { day, scores: (all.daily && all.daily[day]) || {} } };
+    },
+    saveScore: async (game, score, _metrics, day) => {
       const all = load();
       const cur = all[game] || { best: 0, plays: 0 };
       const prev = cur.best;
       all[game] = { best: Math.max(prev, score), plays: cur.plays + 1 };
+      let dailyBest = null;
+      if (day) {
+        all.daily = all.daily || {};
+        const d = (all.daily[day] = all.daily[day] || {});
+        d[game] = Math.max(d[game] || 0, score);
+        dailyBest = d[game];
+      }
       try {
         localStorage.setItem('arcade-scores', JSON.stringify(all));
       } catch {}
-      return { best: all[game].best, prev, record: score > prev, plays: all[game].plays };
+      return { best: all[game].best, prev, record: score > prev, plays: all[game].plays, dailyBest };
     },
   };
 }

@@ -82,11 +82,11 @@
   const hpScale = (n) => 1.12 ** (n - 1) * (1 + 0.04 * (n - 1));
 
   // 一波里来哪些：越往后越多、越杂；每 5 波压轴来一个祖传代码
-  function makeWave(n) {
+  function makeWave(n, rng) {
     const list = [];
     const count = 6 + Math.floor(n * 1.7);
     for (let i = 0; i < count; i++) {
-      const r = Math.random();
+      const r = rng();
       if (n >= 2 && r < Math.min(0.3, 0.1 + n * 0.02)) list.push('race');
       else if (n >= 3 && r > 1 - Math.min(0.25, 0.06 + n * 0.015)) list.push('leak');
       else list.push('bug');
@@ -113,7 +113,7 @@
       this.wave = 0;
       this.phase = 'build';
       this.countdown = FIRST_BUILD;
-      this.next = makeWave(1);
+      this.next = makeWave(1, env.rng); // 今日挑战时按日期播种：每一波来什么大家一样
       this.queue = [];
       this.spawnT = 0;
       this.enemies = [];
@@ -340,7 +340,7 @@
     spawn(type) {
       const d = ENEMIES[type];
       const hp = Math.round(d.hp * hpScale(this.wave));
-      this.enemies.push({ type, hp, max: hp, speed: d.speed * (0.92 + Math.random() * 0.16), d: 0, slowT: 0, slowK: 1, hitT: 0, ph: Math.random() * 6 });
+      this.enemies.push({ type, hp, max: hp, speed: d.speed * (0.92 + this.env.rng() * 0.16), d: 0, slowT: 0, slowK: 1, hitT: 0, ph: Math.random() * 6 });
     }
 
     // 射程里走得最远的那只（离 main 最近）
@@ -431,7 +431,7 @@
       this.score += 50 * this.wave;
       this.phase = 'build';
       this.countdown = BUILD;
-      this.next = makeWave(this.wave + 1);
+      this.next = makeWave(this.wave + 1, this.env.rng);
       this.banner = { text: tr('defense.cleared', { n: this.wave, t: bonus }), color: '#9BE38B', life: 1.8 };
       this.env.sound('level');
     }

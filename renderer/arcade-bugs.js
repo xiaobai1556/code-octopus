@@ -1,11 +1,12 @@
 // 捉虫大作战：Bug 从屏幕上掉下来，小章鱼在桌面上左右跑着接。
-// 接住得分，连着接倍数往上翻；Bug 掉到桌上扣一颗心；红色的 rm -rf 碰到扣一颗心；咖啡补一颗心。
-// 每接住 15 只进入下一轮迭代：掉得更快、更密，rm -rf 更多。
+// 接住得分，连着接倍数往上翻；Bug 掉到桌上扣一颗心；红色的 rm -rf 碰到扣一颗心；咖啡补一颗心（心满了就加分）。
+// 每 20 秒进入下一轮迭代：掉得更快、更密，rm -rf 更多。按时间而不是按接住的数量升级，
+// 今日挑战里什么时候掉什么、掉在哪，才对所有人都一样。
 (() => {
   const GROUND = 222; // 桌面
   const PET_UNIT = 2; // 小章鱼 32×20
   const MAX_LIVES = 5;
-  const PER_LEVEL = 15;
+  const LEVEL_SECS = 20; // 每一轮迭代多少秒
   const SPEED = 220;
 
   const BUG = ['.k....k.', '..k..k..', '.kGGGGk.', 'kGGgGGGk', '.GgGGgG.', 'kGGGGGGk', '.k.GG.k.'];
@@ -82,10 +83,16 @@
       this.x = clamp(this.x + this.vx * dt, 18, W - 18);
       if (Math.abs(this.vx) > 10) this.facing = Math.sign(this.vx);
 
+      const level = 1 + Math.floor(this.t / LEVEL_SECS);
+      if (level > this.level) {
+        this.level = level;
+        this.banner = 1.6;
+        this.env.sound('level');
+      }
       this.spawnT -= dt;
       if (this.spawnT <= 0) {
         this.spawn();
-        this.spawnT = Math.max(0.42, 1.45 - this.level * 0.1) * rand(0.75, 1.2);
+        this.spawnT = Math.max(0.42, 1.45 - this.level * 0.1) * this.env.rand(0.75, 1.2);
       }
       for (const it of this.items) {
         it.y += it.vy * dt;
@@ -117,16 +124,18 @@
       this.shake = Math.max(0, this.shake - dt);
     }
 
+    // 掉什么、掉在哪、多快都用 env 的随机数：今日挑战时它是按日期播种的，大家同一局
     spawn() {
+      const R = this.env.rand;
       const bombP = Math.min(0.3, 0.1 + this.level * 0.025);
-      const r = Math.random();
+      const r = this.env.rng();
       let kind = 'bug';
       if (r < bombP) kind = 'bomb';
       else if (r < bombP + 0.05) kind = 'gold';
-      else if (r < bombP + 0.1 && this.lives < MAX_LIVES) kind = 'coffee';
-      const vy = (40 + this.level * 8 + rand(0, 16)) * (kind === 'gold' ? 1.35 : 1);
+      else if (r < bombP + 0.1) kind = 'coffee';
+      const vy = (40 + this.level * 8 + R(0, 16)) * (kind === 'gold' ? 1.35 : 1);
       const wobbly = kind === 'bug' || kind === 'gold';
-      let x = rand(14, W - 14);
+      let x = R(14, W - 14);
       // 公平：要接的东西，和上一个要接的落地时间挨得近的话，落点也不能远到跑不过去
       if (kind !== 'bomb') {
         const landAt = this.t + (GROUND - 18) / vy;
@@ -137,7 +146,7 @@
         }
         this.lastGood = { x, landAt };
       }
-      this.items.push({ kind, x: clamp(x, 14, W - 14), y: 10, vy, sway: wobbly ? rand(6, 18) : 0, wob: rand(1.5, 3.2), ph: rand(0, 6) });
+      this.items.push({ kind, x: clamp(x, 14, W - 14), y: 10, vy, sway: wobbly ? R(6, 18) : 0, wob: R(1.5, 3.2), ph: R(0, 6) });
     }
 
     // 接住了
@@ -155,8 +164,14 @@
         return;
       }
       if (it.kind === 'coffee') {
-        this.lives = Math.min(MAX_LIVES, this.lives + 1);
-        this.float(tr('bugs.coffee'), at, '#F4D9A0');
+        // 心满了：喝了也补不上，算 20 分
+        if (this.lives >= MAX_LIVES) {
+          this.score += 20;
+          this.float('+20', at, '#F4D9A0');
+        } else {
+          this.lives++;
+          this.float(tr('bugs.coffee'), at, '#F4D9A0');
+        }
         this.env.sound('life');
         return;
       }
@@ -169,11 +184,6 @@
       this.float(`+${pts}`, at, it.kind === 'gold' ? '#F2C14E' : '#B6E3A0');
       this.burst(at, it.kind === 'gold' ? ['#F2C14E', '#FFF2B0'] : ['#7DB85C', '#C8F0B0'], 6);
       this.env.sound(it.kind === 'gold' ? 'gold' : 'catch');
-      if (this.caught % PER_LEVEL === 0) {
-        this.level++;
-        this.banner = 1.6;
-        this.env.sound('level');
-      }
     }
 
     // 掉到桌上了

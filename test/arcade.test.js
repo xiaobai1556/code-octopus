@@ -12,9 +12,10 @@ const tmpFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'octo-arca
 test('最高分：破纪录才更新，次数每局加一，存盘读回来一样', () => {
   const file = tmpFile();
   const a = new ArcadeScores(file);
-  assert.deepEqual(a.record('bugs', 120), { best: 120, prev: 0, record: true, plays: 1 });
-  assert.deepEqual(a.record('bugs', 80), { best: 120, prev: 120, record: false, plays: 2 });
-  assert.deepEqual(a.record('bugs', 120), { best: 120, prev: 120, record: false, plays: 3 }); // 平了不算破
+  const plain = { dailyBest: null, dailyRecord: false }; // 不是今日挑战
+  assert.deepEqual(a.record('bugs', 120), { best: 120, prev: 0, record: true, plays: 1, ...plain });
+  assert.deepEqual(a.record('bugs', 80), { best: 120, prev: 120, record: false, plays: 2, ...plain });
+  assert.deepEqual(a.record('bugs', 120), { best: 120, prev: 120, record: false, plays: 3, ...plain }); // 平了不算破
   assert.equal(a.record('bugs', 300).record, true);
   const again = new ArcadeScores(file);
   assert.deepEqual(again.summary().bugs, { best: 300, plays: 4 });
@@ -105,4 +106,30 @@ test('每个成就和它送的装扮都有名字，装扮都登记过部位，�
   }
   // 每个游戏正好一个成就
   assert.deepEqual(achievements.LIST.filter((a) => a.game).map((a) => a.game).sort(), [...GAMES].sort());
+});
+
+test('今日挑战：按天记最好成绩，也算进总的最高分，只留最近两周', () => {
+  const a = new ArcadeScores(tmpFile());
+  assert.deepEqual(a.record('hop', 50, '2026-11-05'), { best: 50, prev: 0, record: true, plays: 1, dailyBest: 50, dailyRecord: true });
+  assert.deepEqual(a.record('hop', 30, '2026-11-05'), { best: 50, prev: 50, record: false, plays: 2, dailyBest: 50, dailyRecord: false });
+  assert.equal(a.record('hop', 40, '2026-11-06').dailyRecord, true); // 新的一天重新算
+  assert.deepEqual(a.dailyOf('2026-11-05'), { hop: 50 });
+  assert.deepEqual(a.dailyOf('2026-11-07'), {});
+  assert.equal(a.record('hop', 10, 'not-a-day').dailyBest, null);
+  for (let d = 10; d < 30; d++) a.record('bugs', d, `2026-11-${d}`);
+  assert.equal(Object.keys(a.data.daily).length, 14);
+  assert.deepEqual(a.dailyOf('2026-11-05'), {});
+});
+
+test('播种的随机数：同一个种子同一串，不同种子不一样，都在 [0, 1)', () => {
+  const { seeded, dayKey } = require('../src/rng');
+  const take = (seed, n = 50) => Array.from({ length: n }, seeded(seed));
+  assert.deepEqual(take('2026-11-05:bugs'), take('2026-11-05:bugs'));
+  assert.notDeepEqual(take('2026-11-05:bugs'), take('2026-11-05:hop'));
+  assert.notDeepEqual(take('2026-11-05:bugs'), take('2026-11-06:bugs'));
+  const xs = take('x', 5000);
+  assert.ok(xs.every((v) => v >= 0 && v < 1));
+  const mean = xs.reduce((s2, v) => s2 + v, 0) / xs.length;
+  assert.ok(Math.abs(mean - 0.5) < 0.03, `mean ${mean}`);
+  assert.match(dayKey(new Date(2026, 0, 5)), /^2026-01-05$/);
 });

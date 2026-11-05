@@ -82,35 +82,37 @@
     // 往上补窗口，补到屏幕顶上再多一点；掉到下面看不见的扔掉。
     // 每个新窗口都保证从上一个跳得到：高度差不超过一跳的高度，左右离得不超过这一跳滞空时间里走得到的距离
     generate() {
+      const R = this.env.rand; // 今日挑战时按日期播种：窗口怎么摆大家都一样
+      const rng = this.env.rng;
       while (this.genY > this.cam - 80) {
         const m = (START_Y - this.genY) / 10;
-        const gap = rand(26, 36 + Math.min(32, m * 0.12)); // 最远 68，一跳 72 够得着
+        const gap = R(26, 36 + Math.min(32, m * 0.12)); // 最远 68，一跳 72 够得着
         this.genY -= gap;
-        const w = Math.max(38, 62 - Math.min(22, m * 0.05)) * rand(0.85, 1.1);
+        const w = Math.max(38, 62 - Math.min(22, m * 0.05)) * R(0.85, 1.1);
         const pMove = clamp((m - 15) * 0.004, 0, 0.32);
         const pFragile = clamp((m - 45) * 0.003, 0, 0.22);
-        const r = Math.random();
+        const r = rng();
         let kind = 'normal';
         if (r < pMove) kind = 'move';
         else if (r < pMove + pFragile && this.lastKind !== 'fragile') kind = 'fragile';
         this.lastKind = kind;
         // 被拖着的窗口只在出生点左右一段来回走，这一段要从可达范围里扣掉
-        const range = kind === 'move' ? rand(24, 48) : 0;
+        const range = kind === 'move' ? R(24, 48) : 0;
         const prev = this.prevCenter == null ? W / 2 : this.prevCenter;
         const reach = Math.max(10, reachX(gap) + w / 2 - range);
         // 生成时不靠"从屏幕另一边绕过去"：直接在够得着的范围里挑，夹回屏幕里只会离得更近
-        const cx = clamp(prev + rand(-reach, reach), w / 2 + 4 + range, W - w / 2 - 4 - range);
+        const cx = clamp(prev + R(-reach, reach), w / 2 + 4 + range, W - w / 2 - 4 - range);
         this.prevCenter = cx;
         const x = cx - w / 2;
         this.plats.push({
           x, y: this.genY, w, kind, home: x, range,
-          vx: kind === 'move' ? rand(25, 45 + Math.min(30, m * 0.06)) * (Math.random() < 0.5 ? -1 : 1) : 0,
-          spring: kind === 'normal' && m > 8 && Math.random() < 0.08,
+          vx: kind === 'move' ? R(25, 45 + Math.min(30, m * 0.06)) * (rng() < 0.5 ? -1 : 1) : 0,
+          spring: kind === 'normal' && m > 8 && rng() < 0.08,
           springT: 0,
           gone: 0,
-          lines: Array.from({ length: 2 }, () => rand(0.3, 0.8)),
+          lines: Array.from({ length: 2 }, () => R(0.3, 0.8)),
         });
-        if (Math.random() < 0.2) this.stars.push({ x: clamp(x + w / 2 + rand(-24, 24), 10, W - 10), y: this.genY - rand(22, 48), got: false, ph: rand(0, 6) });
+        if (rng() < 0.2) this.stars.push({ x: clamp(x + w / 2 + R(-24, 24), 10, W - 10), y: this.genY - R(22, 48), got: false, ph: R(0, 6) });
       }
       const bottom = this.cam + H + 40;
       this.plats = this.plats.filter((p) => p.y < bottom && !(p.gone > 0.4));
